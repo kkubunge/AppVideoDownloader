@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">동영상 다운로더</string>
+
+    <string name="tab_browser">브라우저</string>
+    <string name="tab_downloads">다운로드</string>
+    <string name="tab_library">보관함</string>
+
+    <string name="notif_channel_progress_name">다운로드 진행</string>
+    <string name="notif_channel_progress_desc">동영상 다운로드 진행 상황을 표시합니다.</string>
+    <string name="notif_channel_done_name">다운로드 완료</string>
+    <string name="notif_channel_done_desc">다운로드가 끝나면 알려줍니다.</string>
+</resources>
