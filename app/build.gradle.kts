@@ -24,6 +24,23 @@ android {
         buildConfigField("String", "BUILD_ID", "\"$buildId\"")
     }
 
+    signingConfigs {
+        getByName("debug") {
+            // 저장소에 고정해 둔 디버그 키로 서명한다.
+            //
+            // 이게 없으면 빌드 환경마다 키가 새로 만들어진다. CI 러너는 매번
+            // 깨끗한 상태라 늘 새 키가 되고, 안드로이드는 서명이 다른 앱의
+            // 업데이트를 거부해서 설치할 때마다 기존 앱을 지워야 했다.
+            val fixedKeystore = rootProject.file("app/debug.keystore")
+            if (fixedKeystore.exists()) {
+                storeFile = fixedKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true

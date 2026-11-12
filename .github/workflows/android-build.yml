@@ -32,6 +32,32 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # 러너는 매번 깨끗한 상태라 디버그 키가 새로 만들어진다. 서명이 바뀌면
+      # 안드로이드가 업데이트를 거부해 설치 때마다 기존 앱을 지워야 한다.
+      # 키를 한 번 만들어 저장소에 넣어 두고, 이후로는 그것을 재사용한다.
+      - name: 디버그 서명 키 준비
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -e
+          if [ -f app/debug.keystore ]; then
+            echo "고정 디버그 키가 이미 있다."
+            exit 0
+          fi
+
+          keytool -genkeypair -v \
+            -keystore app/debug.keystore \
+            -storepass android -keypass android \
+            -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f app/debug.keystore
+          git commit -m "CI: 고정 디버그 서명 키 추가 [skip ci]"
+          git push origin HEAD:master
+
       # 러너 PATH에 sdkmanager가 없어 직접 호출은 실패한다.
       # 이 액션이 cmdline-tools 설치 · 라이선스 동의 · 패키지 설치를 한 번에 처리한다.
       - name: Android SDK 준비
