@@ -49,7 +49,8 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          gradle assembleDebug --stacktrace --no-daemon 2>&1 | tee build-output.txt
+          gradle assembleDebug --stacktrace --no-daemon \
+            -PbuildId="${GITHUB_SHA:0:7}" 2>&1 | tee build-output.txt
 
       - name: APK 업로드
         if: success()

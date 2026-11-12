@@ -35,6 +35,7 @@ class VideoJsBridge(
 
             detections.setOnScreen(
                 urls = toList(json.optJSONArray("visible")),
+                posters = toList(json.optJSONArray("posters")),
                 count = json.optInt("visibleCount", 0),
                 changed = json.optBoolean("changed", false),
             )
@@ -110,29 +111,48 @@ class VideoJsBridge(
           }
 
           var lastKey = '';
+          var seq = 0;
 
           function scan() {
             var all = [];
-            var entries = [];
+            var items = [];
             var visibleCount = 0;
 
             var videos = document.querySelectorAll('video');
             for (var i = 0; i < videos.length; i++) {
               var v = videos[i];
+
+              // src가 blob이면 주소로는 영상을 구분할 수 없다. 요소마다 번호를 붙여
+              // '보이는 영상이 바뀌었다'는 사실만이라도 정확히 알 수 있게 한다.
+              if (!v.__vdlId) { seq++; v.__vdlId = 'v' + seq; }
+
               var srcs = srcsOf(v);
+              for (var j = 0; j < srcs.length; j++) all.push(srcs[j]);
+
               var ratio = visibleRatio(v);
-              var onScreen = ratio >= ${VISIBLE_RATIO};
-              if (onScreen) visibleCount++;
-              for (var j = 0; j < srcs.length; j++) {
-                all.push(srcs[j]);
-                if (onScreen) entries.push({ u: srcs[j], r: ratio });
+              if (ratio >= ${VISIBLE_RATIO}) {
+                visibleCount++;
+                items.push({
+                  id: v.__vdlId,
+                  r: ratio,
+                  s: srcs,
+                  // 썸네일 주소에는 보통 스트림과 같은 미디어 번호가 들어 있다.
+                  p: usable(v.poster) ? absolute(v.poster) : ''
+                });
               }
             }
 
             // 많이 보이는 것부터 앞에 둔다. 앱은 이 순서를 그대로 목록에 쓴다.
-            entries.sort(function (a, b) { return b.r - a.r; });
+            items.sort(function (a, b) { return b.r - a.r; });
+
             var visible = [];
-            for (var n = 0; n < entries.length; n++) visible.push(entries[n].u);
+            var posters = [];
+            var key = '';
+            for (var n = 0; n < items.length; n++) {
+              for (var m = 0; m < items[n].s.length; m++) visible.push(items[n].s[m]);
+              if (items[n].p) posters.push(items[n].p);
+              key += items[n].id + '|';
+            }
 
             var extra = document.querySelectorAll(
               'source[type*="video"], source[type*="mpegurl"], a[href*=".mp4"], a[href*=".m3u8"]'
@@ -150,15 +170,15 @@ class VideoJsBridge(
               if (usable(mu)) all.push(absolute(mu));
             }
 
-            // 보이는 영상이 바뀐 순간을 알려야, blob이라 주소를 못 얻는 스트림도
-            // "이 시점 직후에 잡힌 것"으로 짝지을 수 있다.
-            var key = visibleCount + ':' + visible.join('|');
+            // 요소 번호로 키를 만든다. 주소가 blob이라 전부 빈 문자열이어도
+            // 보이는 영상이 바뀌면 키는 반드시 바뀐다.
             var changed = key !== lastKey;
             lastKey = key;
 
             bridge.onScan(JSON.stringify({
               all: all,
               visible: visible,
+              posters: posters,
               visibleCount: visibleCount,
               changed: changed
             }));

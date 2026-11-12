@@ -34,6 +34,14 @@ class DetectionStore {
     private var onScreenOrder: List<String> = emptyList()
     private val onScreenUrls = mutableSetOf<String>()
 
+    /**
+     * 화면에 보이는 영상의 미디어 번호.
+     *
+     * 썸네일 주소와 스트림 주소가 같은 번호를 공유하는 사이트가 많다(X가 그렇다).
+     * src가 blob이라 주소를 못 얻어도 이 번호로는 짝지을 수 있다.
+     */
+    private val onScreenKeys = mutableSetOf<String>()
+
     /** 화면에 보이는 <video> 요소 수. 주소를 못 얻는 blob 스트림도 세어진다. */
     private var onScreenCount = 0
 
@@ -94,14 +102,20 @@ class DetectionStore {
      * DOM 스캐너가 보고한 화면 상태를 반영한다.
      *
      * @param urls 화면에 보이는 <video>에서 직접 읽어낸 주소
+     * @param posters 그 영상들의 썸네일 주소
      * @param count 화면에 보이는 <video> 요소 수
      * @param changed 직전 보고와 견줘 보이는 영상이 바뀌었는지
      */
     @Synchronized
-    fun setOnScreen(urls: List<String>, count: Int, changed: Boolean) {
+    fun setOnScreen(urls: List<String>, posters: List<String>, count: Int, changed: Boolean) {
         onScreenOrder = urls.map { normalize(it) }
         onScreenUrls.clear()
         onScreenUrls.addAll(onScreenOrder)
+
+        onScreenKeys.clear()
+        posters.forEach { onScreenKeys.addAll(mediaKeys(it)) }
+        urls.forEach { onScreenKeys.addAll(mediaKeys(it)) }
+
         onScreenCount = count
         if (changed) focusChangedAt = System.currentTimeMillis()
         recomputeOnScreen()
@@ -129,19 +143,44 @@ class DetectionStore {
         }
 
         val focus = focusChangedAt
-        val matched = _videos.value.filter { video ->
-            normalize(video.url) in onScreenUrls ||
-                (focus > 0 && video.detectedAt in (focus - MATCH_BEFORE_MS)..(focus + MATCH_AFTER_MS))
+        val ranked = _videos.value
+            .mapNotNull { video -> rankOf(video, focus)?.let { video to it } }
+
+        // 확실한 짝(주소 → 미디어 번호 → 시점) 순으로, 같은 등급 안에서는 최근 것부터.
+        _onScreenVideos.value = ranked
+            .sortedWith(compareBy<Pair<DetectedVideo, Int>> { it.second }
+                .thenByDescending { it.first.detectedAt })
+            .map { it.first }
+    }
+
+    /**
+     * 화면에 보이는 영상으로 칠 수 있는지, 그리고 얼마나 확실한지.
+     *
+     * @return 작을수록 확실한 짝. null이면 화면 밖으로 본다.
+     */
+    private fun rankOf(video: DetectedVideo, focus: Long): Int? {
+        val key = normalize(video.url)
+
+        // 1) DOM이 알려준 주소와 그대로 일치. 많이 보이는 순서를 그대로 쓴다.
+        val index = onScreenOrder.indexOf(key)
+        if (index >= 0) return index
+
+        // 2) 썸네일과 같은 미디어 번호를 공유. blob 스트림을 짝짓는 주된 방법이다.
+        if (onScreenKeys.isNotEmpty() && mediaKeys(video.url).any { it in onScreenKeys }) {
+            return RANK_MEDIA_KEY
         }
 
-        // 화면에 많이 보이는 것이 위로. 주소를 못 맞춘(시점으로만 짝지은) 것은 그 뒤에
-        // 최근 순으로 둔다.
-        _onScreenVideos.value = matched.sortedWith(
-            compareBy<DetectedVideo> { video ->
-                onScreenOrder.indexOf(normalize(video.url)).takeIf { it >= 0 } ?: Int.MAX_VALUE
-            }.thenByDescending { it.detectedAt }
-        )
+        // 3) 보이는 영상이 바뀐 직후에 잡힌 것. 위 둘이 모두 안 될 때의 마지막 수단.
+        if (focus > 0 && video.detectedAt in (focus - MATCH_BEFORE_MS)..(focus + MATCH_AFTER_MS)) {
+            return RANK_RECENT
+        }
+
+        return null
     }
+
+    /** 주소에 박힌 긴 숫자(미디어 번호)를 뽑는다. */
+    private fun mediaKeys(url: String): Set<String> =
+        MEDIA_ID.findAll(url).map { it.value }.toSet()
 
     private fun reset(pageUrl: String) {
         currentPage = pageUrl
@@ -149,6 +188,7 @@ class DetectionStore {
         _onScreenVideos.value = emptyList()
         onScreenOrder = emptyList()
         onScreenUrls.clear()
+        onScreenKeys.clear()
         onScreenCount = 0
         focusChangedAt = 0L
         inspected.clear()
@@ -172,6 +212,13 @@ class DetectionStore {
     private companion object {
         const val MAX_VIDEOS = 50
         const val MAX_INSPECTED = 600
+
+        /** 미디어 번호로 볼 만한 길이의 숫자. 짧은 숫자는 해상도·날짜 등 잡음이 많다. */
+        val MEDIA_ID = Regex("""\d{10,}""")
+
+        /** 주소가 그대로 맞은 것들(0, 1, 2 …) 뒤에 오도록 충분히 큰 값을 쓴다. */
+        const val RANK_MEDIA_KEY = 1_000
+        const val RANK_RECENT = 2_000
 
         /** 스크롤이 멎기 직전에 미리 요청된 스트림까지 품기 위한 여유. */
         const val MATCH_BEFORE_MS = 1_000L

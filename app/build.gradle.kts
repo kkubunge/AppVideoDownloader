@@ -15,6 +15,12 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
+
+        // CI가 -PbuildId=<커밋 해시>로 넘겨준다. 설치된 것이 어느 빌드인지
+        // 앱 안에서 바로 확인할 수 있어야 "고쳤는데 그대로"를 가려낼 수 있다.
+        val buildId = (project.findProperty("buildId") as String?)?.takeIf { it.isNotBlank() }
+            ?: "local"
+        buildConfigField("String", "BUILD_ID", "\"$buildId\"")
     }
 
     buildTypes {
@@ -39,6 +45,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {

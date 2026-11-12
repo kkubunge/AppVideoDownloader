@@ -29,6 +29,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -58,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiutil.videodownloader.App
+import com.aiutil.videodownloader.BuildConfig
 import com.aiutil.videodownloader.browser.TabManager
 import com.aiutil.videodownloader.model.DetectedVideo
 import com.aiutil.videodownloader.model.DownloadStatus
@@ -357,6 +359,20 @@ private fun AddressBar(
                             menuOpen = false
                             viewModel.sheet = BrowserViewModel.Sheet.HISTORY
                         },
+                    )
+
+                    HorizontalDivider()
+
+                    // 설치된 것이 어느 빌드인지 바로 확인하기 위한 표시.
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "빌드 ${BuildConfig.BUILD_ID}",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        },
+                        enabled = false,
+                        onClick = {},
                     )
                 }
             }
