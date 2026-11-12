@@ -25,10 +25,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Android SDK 구성요소 설치
-        run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+      # 러너 PATH에 sdkmanager가 없어 직접 호출은 실패한다.
+      # 이 액션이 cmdline-tools 설치 · 라이선스 동의 · 패키지 설치를 한 번에 처리한다.
+      - name: Android SDK 준비
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
       # 저장소에 gradle wrapper(바이너리)가 없으므로 Gradle을 직접 준비한다.
       - name: Gradle 8.9 준비
