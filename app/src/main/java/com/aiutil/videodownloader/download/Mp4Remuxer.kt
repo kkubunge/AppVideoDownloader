@@ -26,6 +26,14 @@ object Mp4Remuxer {
     /** 조각 하나가 통째로 담길 만큼 넉넉히 잡는다. 작으면 읽다가 터진다. */
     private const val MIN_BUFFER = 2 shl 20
 
+    /**
+     * 마지막 변환이 왜 실패했는지. 재생이 안 될 때 원인을 가리기 위해 남긴다.
+     * 로그만으로는 기기에서 확인할 수 없다.
+     */
+    @Volatile
+    var lastFailure: String? = null
+        private set
+
     /** @return 성공하면 true. 실패 시 [dst]는 정리된다. */
     fun remux(src: File, dst: File): Boolean {
         val extractor = MediaExtractor()
@@ -113,9 +121,11 @@ object Mp4Remuxer {
             }
 
             check(written > 0) { "옮긴 샘플이 하나도 없다" }
+            lastFailure = null
             true
         } catch (t: Throwable) {
             Log.w(TAG, "MP4 변환 실패, 원본을 그대로 쓴다", t)
+            lastFailure = "${t::class.java.simpleName}: ${t.message ?: "원인 불명"}"
             false
         } finally {
             runCatching { extractor.release() }

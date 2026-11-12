@@ -242,11 +242,11 @@ private fun LibraryRow(
                     modifier = Modifier.padding(top = 4.dp),
                 )
 
-                // TS는 스트리밍 조각을 그대로 이어 붙인 형식이다. MP4 변환이 실패했을
-                // 때만 남으며, 갤러리 앱이 인식하지 못하는 경우가 있어 알려 준다.
-                if (Names.extensionOf(item.fileName) == "ts") {
+                // 변환에 실패했으면 확장자가 mp4여도 갤러리와 기본 재생기가 열지
+                // 못한다. 겉보기로는 구분되지 않으니 분명히 알려 준다.
+                if (item.remuxed == false) {
                     Text(
-                        text = "TS 형식 · MP4 변환 실패, 일부 재생기에서만 열립니다",
+                        text = item.errorMessage ?: "MP4 변환 실패 · 일부 재생기에서만 열립니다",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.padding(top = 2.dp),

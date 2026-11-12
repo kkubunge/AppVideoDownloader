@@ -91,6 +91,13 @@ data class DownloadItem(
     /** 완료 시 MediaStore(또는 파일) URI. */
     val outputUri: String? = null,
     val outputDisplayPath: String? = null,
+    /**
+     * 색인 있는 MP4로 다시 담는 데 성공했는지. 단일 파일 다운로드는 해당 없음(null).
+     *
+     * 실패하면 확장자가 mp4여도 갤러리와 기본 재생기가 열지 못한다. 겉보기로는
+     * 구분되지 않아, 재생이 안 될 때 원인을 가리려면 이 값이 필요하다.
+     */
+    val remuxed: Boolean? = null,
     val errorMessage: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val completedAt: Long? = null,

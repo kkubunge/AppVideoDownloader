@@ -242,18 +242,30 @@ class DownloadManagerCore(
      * 없어서, 확장자가 mp4여도 갤러리와 기본 재생기가 열지 못한다.
      */
     private fun publishHls(id: String, part: File, outcome: HlsDownloader.Outcome) {
-        val remuxed = File(part.parentFile, "$id.mp4")
-        if (Mp4Remuxer.remux(part, remuxed)) {
+        val converted = File(part.parentFile, "$id.mp4")
+        if (Mp4Remuxer.remux(part, converted)) {
             part.delete()
-            publish(id, remuxed, "mp4")
+            publish(id, converted, "mp4", remuxed = true)
             return
         }
 
         // 변환이 안 되면 받은 그대로 둔다. 전용 재생기로는 열 수 있다.
-        publish(id, part, if (outcome.isFragmentedMp4) "mp4" else "ts")
+        publish(
+            id = id,
+            source = part,
+            extension = if (outcome.isFragmentedMp4) "mp4" else "ts",
+            remuxed = false,
+            note = Mp4Remuxer.lastFailure?.let { "MP4 변환 실패 · $it" },
+        )
     }
 
-    private fun publish(id: String, source: File, extension: String) {
+    private fun publish(
+        id: String,
+        source: File,
+        extension: String,
+        remuxed: Boolean? = null,
+        note: String? = null,
+    ) {
         val item = store.get(id) ?: return
         validateOrThrow(source)
 
@@ -272,9 +284,11 @@ class DownloadManagerCore(
                 fileName = fileName,
                 outputUri = saved.uri.toString(),
                 outputDisplayPath = saved.displayPath,
+                remuxed = remuxed,
                 totalBytes = if (it.totalBytes > 0) it.totalBytes else size,
                 completedAt = System.currentTimeMillis(),
-                errorMessage = null,
+                // 완료됐지만 변환에 실패했다면 그 사정을 남겨 둔다.
+                errorMessage = note,
             )
         }
         val finished = store.get(id)
