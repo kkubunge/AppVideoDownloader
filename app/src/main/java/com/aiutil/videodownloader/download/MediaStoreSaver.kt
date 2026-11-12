@@ -23,15 +23,39 @@ object MediaStoreSaver {
 
     private const val FOLDER = "동영상 다운로더"
 
+    /** 이름 충돌로 거절당했을 때 번호를 바꿔 다시 시도할 횟수. */
+    private const val NAME_ATTEMPTS = 5
+
     data class Saved(val uri: Uri, val displayPath: String)
 
     @Throws(IOException::class)
-    fun save(context: Context, source: File, displayName: String, mimeType: String): Saved =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            saveViaMediaStore(context, source, displayName, mimeType)
-        } else {
-            saveToPublicDirectory(context, source, displayName)
+    fun save(context: Context, source: File, displayName: String, mimeType: String): Saved {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return saveToPublicDirectory(context, source, displayName)
         }
+
+        // 같은 이름이 이미 있으면 저장소가 "Failed to build unique file"로 거절한다.
+        // 번호를 붙여 몇 번 더 시도한다.
+        var lastError: Throwable? = null
+        repeat(NAME_ATTEMPTS) { attempt ->
+            val name = if (attempt == 0) displayName else numbered(displayName, attempt)
+            try {
+                return saveViaMediaStore(context, source, name, mimeType)
+            } catch (t: Throwable) {
+                lastError = t
+            }
+        }
+        throw IOException(
+            "저장소에 파일을 만들지 못했습니다: ${lastError?.message ?: "알 수 없는 오류"}",
+            lastError,
+        )
+    }
+
+    private fun numbered(displayName: String, index: Int): String {
+        val base = displayName.substringBeforeLast('.', displayName)
+        val ext = displayName.substringAfterLast('.', "")
+        return if (ext.isEmpty()) "$base-$index" else "$base-$index.$ext"
+    }
 
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun saveViaMediaStore(

@@ -52,6 +52,12 @@ object VideoSniffer {
     /** 2단계 판정 후보로 올릴 만한 힌트. */
     private val PROBE_HINTS = listOf("video", "/media/", "stream", "playback", "mime=video")
 
+    /**
+     * 자막 트랙의 플레이리스트. HLS 마스터에는 영상과 함께 자막 트랙도 들어 있는데,
+     * 이게 감지 목록에 오르면 .vtt 조각을 영상으로 알고 받게 된다.
+     */
+    private val SUBTITLE_MARKERS = listOf("/subtitle", "/subtitles/", "/sub/", "caption", "webvtt")
+
     /** MP4로 인정할 최소 크기. 이보다 작으면 광고 범퍼나 미리보기일 가능성이 높다. */
     private const val MIN_MP4_BYTES = 150L * 1024
 
@@ -72,6 +78,7 @@ object VideoSniffer {
 
         val ext = extensionOf(lower)
         if (ext in SEGMENT_EXTENSIONS) return
+        if (SUBTITLE_MARKERS.any { it in lower }) return
 
         if (!store.markInspected(url)) return
 

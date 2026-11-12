@@ -3,6 +3,7 @@ package com.aiutil.videodownloader.ui.browser
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -300,10 +301,15 @@ private fun AddressBar(
     val activeTab = tabManager.activeTab
     var menuOpen by remember { mutableStateOf(false) }
 
-    // 색 대비만으로는 테마가 어떻게 풀리느냐에 따라 묻혀 버린다.
-    // 막대는 surfaceVariant로 분명히 구분하고, 입력란에는 테두리와 아이콘을 둬서
-    // 어떤 배색에서도 위치를 알 수 있게 한다.
-    Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
+    // 기기 배색(동적 색상)에 맡겼더니 막대 전체가 검게 칠해져 아이콘까지 묻히는
+    // 경우가 있었다. 주소창은 길을 잃으면 앱을 쓸 수 없는 곳이라 색을 직접 지정한다.
+    val dark = isSystemInDarkTheme()
+    val barColor = if (dark) Color(0xFF2B3036) else Color(0xFFEFF1F3)
+    val fieldColor = if (dark) Color(0xFF3C4043) else Color(0xFFFFFFFF)
+    val barContentColor = if (dark) Color(0xFFE8EAED) else Color(0xFF202124)
+    val outlineColor = if (dark) Color(0xFF5F6368) else Color(0xFFBDC1C6)
+
+    Surface(color = barColor, contentColor = barContentColor) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -323,21 +329,26 @@ private fun AddressBar(
                 onValueChange = { viewModel.addressText = it },
                 modifier = Modifier
                     .weight(1f)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, fieldShape)
+                    .border(1.dp, outlineColor, fieldShape)
                     .onFocusChanged {
                         viewModel.onAddressFocusChanged(it.isFocused, activeTab?.url.orEmpty())
                     },
                 singleLine = true,
-                placeholder = { Text("주소 또는 검색어") },
+                placeholder = {
+                    Text("주소 또는 검색어", color = barContentColor.copy(alpha = 0.6f))
+                },
                 leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = null)
+                    Icon(Icons.Default.Search, contentDescription = null, tint = barContentColor)
                 },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(onGo = { viewModel.submitAddress() }),
                 shape = fieldShape,
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    focusedContainerColor = fieldColor,
+                    unfocusedContainerColor = fieldColor,
+                    focusedTextColor = barContentColor,
+                    unfocusedTextColor = barContentColor,
+                    cursorColor = barContentColor,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                     disabledIndicatorColor = Color.Transparent,

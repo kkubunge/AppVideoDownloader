@@ -61,9 +61,26 @@ object HlsDownloader {
                 Resolved.Variants(variants, duration)
             } else {
                 val playlist = M3u8Parser.parseMedia(document.text, document.baseUrl)
+                rejectIfSubtitles(playlist)
                 Resolved.Media(url, playlist, estimateFromFirstSegment(playlist, headers))
             }
         }
+
+    /**
+     * 자막 트랙을 영상으로 착각해 받는 것을 막는다.
+     *
+     * HLS 마스터에는 영상 말고 자막 트랙의 플레이리스트도 함께 들어 있다. 그 주소가
+     * 감지 목록에 올라오면 .vtt 조각을 이어 붙여 재생되지 않는 파일이 만들어진다.
+     */
+    private fun rejectIfSubtitles(playlist: M3u8Parser.MediaPlaylist) {
+        val first = playlist.segments.firstOrNull() ?: return
+        val extension = first.url.substringBefore('?').substringAfterLast('.', "").lowercase()
+        if (extension in SUBTITLE_EXTENSIONS) {
+            throw IOException("자막 트랙입니다. 영상 주소를 골라 주세요")
+        }
+    }
+
+    private val SUBTITLE_EXTENSIONS = setOf("vtt", "webvtt", "srt", "ttml")
 
     /**
      * 화질별 예상 용량. 비트레이트 × 재생시간 ÷ 8.
@@ -124,6 +141,7 @@ object HlsDownloader {
         }
 
         val playlist = M3u8Parser.parseMedia(media.text, media.baseUrl)
+        rejectIfSubtitles(playlist)
 
         if (playlist.isLive) {
             throw IOException("라이브 스트림은 끝이 없어 통째로 받을 수 없다")
