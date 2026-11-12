@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -23,6 +24,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,12 +39,18 @@ import com.aiutil.videodownloader.util.Format
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetectedVideoSheet(
-    videos: List<DetectedVideo>,
+    onScreenVideos: List<DetectedVideo>,
+    allVideos: List<DetectedVideo>,
     onDownload: (DetectedVideo) -> Unit,
     onClear: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // 화면에 보이는 것이 있으면 그것만 먼저 보여준다. 피드를 훑고 온 뒤에는 전체 목록이
+    // 수십 개가 되어 정작 지금 보고 있는 영상을 찾기 어렵다.
+    var showAll by remember(onScreenVideos.isEmpty()) { mutableStateOf(onScreenVideos.isEmpty()) }
+    val shown = if (showAll) allVideos else onScreenVideos
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Row(
@@ -49,17 +60,49 @@ fun DetectedVideoSheet(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text("찾은 영상 ${videos.size}개", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = if (showAll) "이 페이지에서 찾음 ${allVideos.size}개"
+                else "화면에 보이는 영상 ${onScreenVideos.size}개",
+                style = MaterialTheme.typography.titleMedium,
+            )
             TextButton(onClick = onClear) { Text("목록 비우기") }
         }
 
+        if (onScreenVideos.isNotEmpty() && allVideos.size > onScreenVideos.size) {
+            Row(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = !showAll,
+                    onClick = { showAll = false },
+                    label = { Text("화면 ${onScreenVideos.size}") },
+                )
+                FilterChip(
+                    selected = showAll,
+                    onClick = { showAll = true },
+                    label = { Text("전체 ${allVideos.size}") },
+                )
+            }
+        }
+
         HorizontalDivider()
+
+        if (shown.isEmpty()) {
+            Text(
+                text = "화면에 보이는 영상이 없습니다.\n영상이 보이도록 스크롤해 보세요.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(20.dp),
+            )
+            return@ModalBottomSheet
+        }
 
         LazyColumn(
             modifier = Modifier.heightIn(max = 420.dp),
             contentPadding = PaddingValues(vertical = 8.dp),
         ) {
-            items(videos, key = { it.url }) { video ->
+            items(shown, key = { it.url }) { video ->
                 DetectedVideoRow(video = video, onDownload = { onDownload(video) })
             }
         }

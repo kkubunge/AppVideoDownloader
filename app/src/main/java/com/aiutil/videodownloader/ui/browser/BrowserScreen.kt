@@ -78,6 +78,11 @@ fun BrowserScreen(
     }
     val detected by detectionFlow.collectAsStateWithLifecycle()
 
+    val onScreenFlow = remember(activeTab?.id) {
+        activeTab?.detections?.onScreenVideos ?: MutableStateFlow(emptyList<DetectedVideo>())
+    }
+    val onScreen by onScreenFlow.collectAsStateWithLifecycle()
+
     val bookmarks by App.bookmarks.items.collectAsStateWithLifecycle()
     val history by App.history.items.collectAsStateWithLifecycle()
 
@@ -140,11 +145,14 @@ fun BrowserScreen(
                 StartPage(onOpen = viewModel::open, modifier = Modifier.fillMaxSize())
             }
 
-            if (detected.isNotEmpty()) {
+            // 화면에 보이는 것을 우선 센다. 보이는 게 없을 때만 페이지 전체 수를 보여준다 —
+            // 0개라고 표시해 버리면 받을 방법이 사라진다.
+            val badgeCount = if (onScreen.isNotEmpty()) onScreen.size else detected.size
+            if (badgeCount > 0) {
                 ExtendedFloatingActionButton(
                     onClick = { viewModel.sheet = BrowserViewModel.Sheet.DETECTED },
                     icon = { Icon(Icons.Default.VideoLibrary, contentDescription = null) },
-                    text = { Text("영상 ${detected.size}개") },
+                    text = { Text("영상 ${badgeCount}개") },
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(16.dp),
@@ -166,7 +174,8 @@ fun BrowserScreen(
 
     when (viewModel.sheet) {
         BrowserViewModel.Sheet.DETECTED -> DetectedVideoSheet(
-            videos = detected,
+            onScreenVideos = onScreen,
+            allVideos = detected,
             onDownload = {
                 viewModel.sheet = null
                 viewModel.onDownloadRequested(it)
