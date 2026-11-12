@@ -237,7 +237,8 @@ fun BrowserScreen(
 
                 when {
                     primary != null -> ExtendedFloatingActionButton(
-                        onClick = { viewModel.onDownloadRequested(primary) },
+                        // 고른 것이 자막으로 드러나면 같은 화면의 다른 주소로 넘어간다.
+                        onClick = { viewModel.onDownloadRequested(primary, onScreen + detected) },
                         icon = { Icon(Icons.Default.Download, contentDescription = null) },
                         text = { Text("이 영상 받기") },
                     )
@@ -270,7 +271,7 @@ fun BrowserScreen(
             downloadedUrls = downloadedUrls,
             onDownload = {
                 viewModel.sheet = null
-                viewModel.onDownloadRequested(it)
+                viewModel.onDownloadRequested(it, onScreen + detected)
             },
             onClear = {
                 activeTab?.detections?.clear()

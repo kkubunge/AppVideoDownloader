@@ -182,20 +182,29 @@ class DetectionStore {
 
         // 1) DOM이 알려준 주소와 그대로 일치. 많이 보이는 순서를 그대로 쓴다.
         val index = onScreenOrder.indexOf(key)
-        if (index >= 0) return index
+        if (index >= 0) return index + subtitlePenalty(video.url)
 
         // 2) 썸네일과 같은 미디어 번호를 공유. blob 스트림을 짝짓는 주된 방법이다.
         if (onScreenKeys.isNotEmpty() && mediaKeys(video.url).any { it in onScreenKeys }) {
-            return RANK_MEDIA_KEY
+            return RANK_MEDIA_KEY + subtitlePenalty(video.url)
         }
 
         // 3) 보이는 영상이 바뀐 직후에 잡힌 것. 위 둘이 모두 안 될 때의 마지막 수단.
         if (focus > 0 && video.detectedAt in (focus - MATCH_BEFORE_MS)..(focus + MATCH_AFTER_MS)) {
-            return RANK_RECENT
+            return RANK_RECENT + subtitlePenalty(video.url)
         }
 
         return null
     }
+
+    /**
+     * 자막 트랙은 뒤로 민다.
+     *
+     * 한 영상의 영상 트랙과 자막 트랙은 같은 미디어 번호를 쓴다. 그래서 순위가
+     * 같아지고, 보통 나중에 불리는 자막이 이겨 버린다.
+     */
+    private fun subtitlePenalty(url: String): Int =
+        if (SUBTITLE_HINTS.any { it in url.lowercase() }) RANK_SUBTITLE_PENALTY else 0
 
     /** 주소에 박힌 긴 숫자(미디어 번호)를 뽑는다. */
     private fun mediaKeys(url: String): Set<String> =
@@ -239,6 +248,10 @@ class DetectionStore {
         /** 주소가 그대로 맞은 것들(0, 1, 2 …) 뒤에 오도록 충분히 큰 값을 쓴다. */
         const val RANK_MEDIA_KEY = 1_000
         const val RANK_RECENT = 2_000
+
+        /** 자막으로 보이는 주소는 어떤 등급이든 영상보다 뒤로 간다. */
+        const val RANK_SUBTITLE_PENALTY = 10_000
+        val SUBTITLE_HINTS = listOf("/sub/", "/subs/", "subtitle", "caption", ".vtt")
 
         /** 스크롤이 멎기 직전에 미리 요청된 스트림까지 품기 위한 여유. */
         const val MATCH_BEFORE_MS = 1_000L

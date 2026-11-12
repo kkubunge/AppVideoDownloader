@@ -62,6 +62,9 @@ class BrowserViewModel : ViewModel() {
 
     private var isEditingAddress = false
 
+    /** 자막을 골랐을 때 대신 시도해 볼 같은 화면의 다른 영상 주소들. */
+    private var candidates: List<DetectedVideo> = emptyList()
+
     fun consumePendingLoad() {
         pendingLoad = null
     }
@@ -93,7 +96,10 @@ class BrowserViewModel : ViewModel() {
      * 다운로드 요청의 입구. 과거 기록이 있으면 먼저 확인을 받는다 —
      * 네트워크를 타기 전에 묻기 때문에 기다릴 필요가 없다.
      */
-    fun onDownloadRequested(video: DetectedVideo) {
+    fun onDownloadRequested(video: DetectedVideo, alternatives: List<DetectedVideo> = emptyList()) {
+        // 고른 주소가 자막으로 드러나면 같은 화면의 다른 후보로 넘어가야 한다.
+        candidates = alternatives.distinctBy { it.url }
+
         val past = App.history.findMatches(video.url, video.pageUrl)
         if (past.isNotEmpty()) {
             historyPrompt = HistoryPrompt(video, past)
@@ -158,44 +164,67 @@ class BrowserViewModel : ViewModel() {
             MediaKind.HLS -> viewModelScope.launch {
                 resolving = true
                 try {
-                    val fileName = Names.buildFileName(video.displayName, video.url, MediaKind.HLS)
-                    downloadPlan = when (val resolved = HlsDownloader.resolve(video.url, video.headers)) {
-                        is HlsDownloader.Resolved.Variants -> {
-                            val options = resolved.variants.map {
-                                VariantOption(it, HlsDownloader.estimateBytes(it.bandwidth, resolved.durationSec))
-                            }
-                            // 목록은 비트레이트 내림차순이라 0번이 가장 좋은 화질이다.
-                            selectedVariantIndex = 0
-                            DownloadPlan(
-                                source = video,
-                                fileName = fileName,
-                                kind = MediaKind.HLS,
-                                sizeBytes = options.firstOrNull()?.estimatedBytes ?: -1L,
-                                variants = options,
-                                durationSec = resolved.durationSec,
-                                isEstimate = true,
-                            )
-                        }
-
-                        is HlsDownloader.Resolved.Media -> DownloadPlan(
-                            source = video,
-                            fileName = fileName,
-                            kind = MediaKind.HLS,
-                            sizeBytes = resolved.estimatedBytes,
-                            variants = emptyList(),
-                            durationSec = resolved.playlist.totalDurationSec,
-                            isEstimate = true,
+                    // 고른 것이 자막이면 같은 화면의 다른 주소로 자동으로 넘어간다.
+                    // 한 영상의 영상 트랙과 자막 트랙은 구분하기 어려워 미리 가려낼 수 없다.
+                    val queue = buildList {
+                        add(video)
+                        addAll(
+                            candidates.filter { it.kind == MediaKind.HLS && it.url != video.url }
                         )
+                    }.take(MAX_RESOLVE_ATTEMPTS)
+
+                    var lastReason: String? = null
+                    for (candidate in queue) {
+                        try {
+                            downloadPlan = buildHlsPlan(candidate)
+                            return@launch
+                        } catch (t: Throwable) {
+                            lastReason = t.message ?: "알 수 없는 오류"
+                            // 자막이 아닌 오류라면 다음 후보를 시도해도 같은 결과다.
+                            if (lastReason != HlsDownloader.SUBTITLE_MESSAGE) break
+                        }
                     }
-                } catch (t: Throwable) {
-                    val reason = t.message ?: "알 수 없는 오류"
-                    toast = reason
-                    // 자막을 고른 경우라면 목록을 열어 영상 주소를 바로 고르게 한다.
-                    if (reason == HlsDownloader.SUBTITLE_MESSAGE) sheet = Sheet.DETECTED
+
+                    toast = lastReason ?: "스트림 정보를 읽지 못했습니다"
+                    // 끝까지 자막만 나왔다면 목록을 열어 직접 고르게 한다.
+                    if (lastReason == HlsDownloader.SUBTITLE_MESSAGE) sheet = Sheet.DETECTED
                 } finally {
                     resolving = false
                 }
             }
+        }
+    }
+
+    private suspend fun buildHlsPlan(video: DetectedVideo): DownloadPlan {
+        val fileName = Names.buildFileName(video.displayName, video.url, MediaKind.HLS)
+
+        return when (val resolved = HlsDownloader.resolve(video.url, video.headers)) {
+            is HlsDownloader.Resolved.Variants -> {
+                val options = resolved.variants.map {
+                    VariantOption(it, HlsDownloader.estimateBytes(it.bandwidth, resolved.durationSec))
+                }
+                // 목록은 비트레이트 내림차순이라 0번이 가장 좋은 화질이다.
+                selectedVariantIndex = 0
+                DownloadPlan(
+                    source = video,
+                    fileName = fileName,
+                    kind = MediaKind.HLS,
+                    sizeBytes = options.firstOrNull()?.estimatedBytes ?: -1L,
+                    variants = options,
+                    durationSec = resolved.durationSec,
+                    isEstimate = true,
+                )
+            }
+
+            is HlsDownloader.Resolved.Media -> DownloadPlan(
+                source = video,
+                fileName = fileName,
+                kind = MediaKind.HLS,
+                sizeBytes = resolved.estimatedBytes,
+                variants = emptyList(),
+                durationSec = resolved.playlist.totalDurationSec,
+                isEstimate = true,
+            )
         }
     }
 
@@ -240,5 +269,10 @@ class BrowserViewModel : ViewModel() {
         // 공백이 없고 점이 있으면 주소로 본다.
         !input.contains(' ') && input.contains('.') -> "https://$input"
         else -> "https://www.google.com/search?q=" + java.net.URLEncoder.encode(input, "UTF-8")
+    }
+
+    private companion object {
+        /** 자막을 피해 다른 주소를 시도해 보는 횟수. 너무 많으면 기다림만 길어진다. */
+        const val MAX_RESOLVE_ATTEMPTS = 4
     }
 }
