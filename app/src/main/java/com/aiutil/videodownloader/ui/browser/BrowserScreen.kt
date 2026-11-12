@@ -148,23 +148,27 @@ fun BrowserScreen(
             }
         }
 
-        Box(Modifier.weight(1f)) {
-            activeTab?.let { tab ->
-                // key를 걸어야 탭을 바꿀 때 WebView가 실제로 교체된다.
-                key(tab.id) {
-                    AndroidView(
-                        factory = {
-                            tab.webView.also { view ->
-                                (view.parent as? ViewGroup)?.removeView(view)
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-            }
+        val showStartPage = activeTab == null || activeTab.url.isBlank()
 
-            if (activeTab == null || activeTab.url.isBlank()) {
+        Box(Modifier.weight(1f)) {
+            if (showStartPage) {
+                // 아직 아무것도 열지 않았으면 WebView를 붙이지 않는다. 내용이 없는
+                // WebView가 검은 사각형으로 그려지면서 주소창 영역까지 덮는 기기가 있다.
                 StartPage(onOpen = viewModel::open, modifier = Modifier.fillMaxSize())
+            } else {
+                activeTab?.let { tab ->
+                    // key를 걸어야 탭을 바꿀 때 WebView가 실제로 교체된다.
+                    key(tab.id) {
+                        AndroidView(
+                            factory = {
+                                tab.webView.also { view ->
+                                    (view.parent as? ViewGroup)?.removeView(view)
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
             }
 
             // 화면에 보이는 영상이 있으면 그것 하나를 바로 받게 한다. 목록을 펼쳐

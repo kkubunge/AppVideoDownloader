@@ -83,6 +83,10 @@ class BrowserTab(
                 ViewGroup.LayoutParams.MATCH_PARENT,
             )
 
+            // 비워 두면 내용이 없을 때 검게 그려진다. 페이지가 뜨기 전 검은 화면이
+            // 번쩍이는 것도 이걸로 막는다.
+            setBackgroundColor(android.graphics.Color.WHITE)
+
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
