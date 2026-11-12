@@ -233,7 +233,10 @@ private fun LibraryRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "${Format.bytes(item.totalBytes)} · ${Format.timestamp(item.completedAt ?: item.createdAt)}",
+                    // 형식을 보여 준다. 재생이 안 될 때 무엇 때문인지 바로 알 수 있다.
+                    text = "${Names.extensionOf(item.fileName).uppercase()} · " +
+                        "${Format.bytes(item.totalBytes)} · " +
+                        Format.timestamp(item.completedAt ?: item.createdAt),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp),

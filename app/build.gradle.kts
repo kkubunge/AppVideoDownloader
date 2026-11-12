@@ -13,7 +13,8 @@ android {
         applicationId = "com.aiutil.videodownloader"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
+        // CI가 실행 번호를 넘겨준다. 올라가야 안드로이드가 '업데이트'로 취급한다.
+        versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
         versionName = "1.0.0"
 
         // CI가 -PbuildId=<커밋 해시>로 넘겨준다. 설치된 것이 어느 빌드인지

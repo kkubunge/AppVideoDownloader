@@ -4,7 +4,9 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
 import android.util.LruCache
+import android.util.Size
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -74,13 +76,31 @@ private object ThumbnailCache {
     fun load(context: Context, uri: String): Bitmap? {
         cache.get(uri)?.let { return it }
 
+        val parsed = Uri.parse(uri)
+        // 시스템 썸네일 서비스를 먼저 쓴다. 직접 프레임을 뽑는 것보다 다루는 형식이
+        // 넓고, 이미 만들어 둔 것이 있으면 바로 돌려준다.
+        systemThumbnail(context, parsed)?.let { bitmap ->
+            cache.put(uri, bitmap)
+            return bitmap
+        }
+        return extractFrame(context, parsed)?.also { cache.put(uri, it) }
+    }
+
+    private fun systemThumbnail(context: Context, uri: Uri): Bitmap? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        if (uri.scheme != "content") return null
+        return runCatching {
+            context.contentResolver.loadThumbnail(uri, Size(512, 512), null)
+        }.getOrNull()
+    }
+
+    private fun extractFrame(context: Context, uri: Uri): Bitmap? {
         val retriever = MediaMetadataRetriever()
         return try {
-            retriever.setDataSource(context, Uri.parse(uri))
+            retriever.setDataSource(context, uri)
             // 맨 앞은 검은 화면인 경우가 많아 1초 지점을 쓴다.
-            val frame = retriever.getFrameAtTime(1_000_000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            retriever.getFrameAtTime(1_000_000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                 ?: retriever.frameAtTime
-            frame?.also { cache.put(uri, it) }
         } catch (t: Throwable) {
             null
         } finally {

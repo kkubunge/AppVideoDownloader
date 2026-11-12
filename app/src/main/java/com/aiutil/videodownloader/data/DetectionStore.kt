@@ -1,5 +1,6 @@
 package com.aiutil.videodownloader.data
 
+import com.aiutil.videodownloader.download.HlsDownloader
 import com.aiutil.videodownloader.model.DetectedVideo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -204,7 +205,7 @@ class DetectionStore {
      * 같아지고, 보통 나중에 불리는 자막이 이겨 버린다.
      */
     private fun subtitlePenalty(url: String): Int =
-        if (SUBTITLE_HINTS.any { it in url.lowercase() }) RANK_SUBTITLE_PENALTY else 0
+        if (HlsDownloader.looksLikeSubtitles(url)) RANK_SUBTITLE_PENALTY else 0
 
     /** 주소에 박힌 긴 숫자(미디어 번호)를 뽑는다. */
     private fun mediaKeys(url: String): Set<String> =
@@ -251,7 +252,6 @@ class DetectionStore {
 
         /** 자막으로 보이는 주소는 어떤 등급이든 영상보다 뒤로 간다. */
         const val RANK_SUBTITLE_PENALTY = 10_000
-        val SUBTITLE_HINTS = listOf("/sub/", "/subs/", "subtitle", "caption", ".vtt")
 
         /** 스크롤이 멎기 직전에 미리 요청된 스트림까지 품기 위한 여유. */
         const val MATCH_BEFORE_MS = 1_000L

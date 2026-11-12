@@ -171,7 +171,12 @@ class BrowserViewModel : ViewModel() {
                         addAll(
                             candidates.filter { it.kind == MediaKind.HLS && it.url != video.url }
                         )
-                    }.take(MAX_RESOLVE_ATTEMPTS)
+                    }
+                        // 자막처럼 보이는 주소는 뒤로 민다. 안정 정렬이라 나머지 순서는
+                        // 그대로 남는다. 이걸 안 하면 자막을 먼저 시도하느라 시도 횟수를
+                        // 다 써 버리고, 사용자는 될 때까지 버튼을 여러 번 눌러야 한다.
+                        .sortedBy { if (HlsDownloader.looksLikeSubtitles(it.url)) 1 else 0 }
+                        .take(MAX_RESOLVE_ATTEMPTS)
 
                     var lastReason: String? = null
                     for (candidate in queue) {
@@ -180,8 +185,9 @@ class BrowserViewModel : ViewModel() {
                             return@launch
                         } catch (t: Throwable) {
                             lastReason = t.message ?: "알 수 없는 오류"
-                            // 자막이 아닌 오류라면 다음 후보를 시도해도 같은 결과다.
-                            if (lastReason != HlsDownloader.SUBTITLE_MESSAGE) break
+                            // 자막이거나 플레이리스트가 아닌 응답이면 다른 주소를 시도할
+                            // 값어치가 있다. 그 밖의 오류는 후보를 바꿔도 결과가 같다.
+                            if (!worthTryingNext(lastReason)) break
                         }
                     }
 
@@ -194,6 +200,9 @@ class BrowserViewModel : ViewModel() {
             }
         }
     }
+
+    private fun worthTryingNext(reason: String): Boolean =
+        reason == HlsDownloader.SUBTITLE_MESSAGE || reason.contains("플레이리스트가 아닌")
 
     private suspend fun buildHlsPlan(video: DetectedVideo): DownloadPlan {
         val fileName = Names.buildFileName(video.displayName, video.url, MediaKind.HLS)
@@ -273,6 +282,6 @@ class BrowserViewModel : ViewModel() {
 
     private companion object {
         /** 자막을 피해 다른 주소를 시도해 보는 횟수. 너무 많으면 기다림만 길어진다. */
-        const val MAX_RESOLVE_ATTEMPTS = 4
+        const val MAX_RESOLVE_ATTEMPTS = 6
     }
 }

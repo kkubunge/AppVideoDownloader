@@ -82,6 +82,19 @@ object HlsDownloader {
 
     private val SUBTITLE_EXTENSIONS = setOf("vtt", "webvtt", "srt", "ttml")
 
+    private val SUBTITLE_URL_HINTS = listOf("/sub/", "/subs/", "subtitle", "caption", ".vtt")
+
+    /**
+     * 주소 모양만 보고 자막일 가능성을 가늠한다.
+     *
+     * 확실하지 않다 — 사이트마다 경로가 다르다. 그래서 거르는 데는 쓰지 않고,
+     * 어느 것부터 시도할지 순서를 정하는 데만 쓴다.
+     */
+    fun looksLikeSubtitles(url: String): Boolean {
+        val lower = url.lowercase()
+        return SUBTITLE_URL_HINTS.any { it in lower }
+    }
+
     /** 이 문구를 보면 화면이 감지 목록을 열어 준다. 영상 주소를 바로 고를 수 있게. */
     const val SUBTITLE_MESSAGE = "이 주소는 자막 트랙입니다. 같은 영상의 영상 주소를 골라 주세요"
 
