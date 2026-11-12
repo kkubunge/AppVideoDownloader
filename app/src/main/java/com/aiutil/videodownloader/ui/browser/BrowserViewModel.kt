@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 class BrowserViewModel : ViewModel() {
 
     /** 브라우저 위에 띄우는 바텀시트 종류. 한 번에 하나만 뜬다. */
-    enum class Sheet { DETECTED, TABS, BOOKMARKS, HISTORY }
+    enum class Sheet { DETECTED, TABS, BOOKMARKS, HISTORY, DEBUG }
 
     /** 전에 받은 적 있는 영상을 다시 받으려 할 때 보여줄 확인 내용. */
     data class HistoryPrompt(val source: DetectedVideo, val entries: List<DownloadHistoryEntry>)

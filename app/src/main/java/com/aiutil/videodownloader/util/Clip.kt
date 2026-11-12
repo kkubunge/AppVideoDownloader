@@ -16,7 +16,7 @@ object Clip {
 
         // Android 13부터는 시스템이 복사했다는 안내를 직접 띄운다. 중복으로 띄우지 않는다.
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
-            Toast.makeText(context, "주소를 복사했습니다", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "${label}를 복사했습니다", Toast.LENGTH_SHORT).show()
         }
     }
 }

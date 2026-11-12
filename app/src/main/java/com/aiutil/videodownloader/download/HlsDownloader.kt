@@ -1,5 +1,6 @@
 package com.aiutil.videodownloader.download
 
+import com.aiutil.videodownloader.core.DebugLog
 import com.aiutil.videodownloader.core.Http
 import com.aiutil.videodownloader.model.HlsVariant
 import kotlinx.coroutines.Deferred
@@ -72,9 +73,14 @@ object HlsDownloader {
      * HLS 마스터에는 영상 말고 자막 트랙의 플레이리스트도 함께 들어 있다. 그 주소가
      * 감지 목록에 올라오면 .vtt 조각을 이어 붙여 재생되지 않는 파일이 만들어진다.
      */
+    private fun segmentExtension(playlist: M3u8Parser.MediaPlaylist): String =
+        playlist.segments.firstOrNull()
+            ?.url?.substringBefore('?')?.substringAfterLast('.', "")?.lowercase()
+            .orEmpty()
+
     private fun rejectIfSubtitles(playlist: M3u8Parser.MediaPlaylist) {
-        val first = playlist.segments.firstOrNull() ?: return
-        val extension = first.url.substringBefore('?').substringAfterLast('.', "").lowercase()
+        if (playlist.segments.isEmpty()) return
+        val extension = segmentExtension(playlist)
         if (extension in SUBTITLE_EXTENSIONS) {
             throw IOException(SUBTITLE_MESSAGE)
         }
@@ -159,6 +165,14 @@ object HlsDownloader {
         val playlist = M3u8Parser.parseMedia(media.text, media.baseUrl)
         rejectIfSubtitles(playlist)
 
+        DebugLog.log(
+            "HLS",
+            "조각 ${playlist.segments.size}개 · 길이 ${playlist.totalDurationSec.toInt()}초 · " +
+                "첫 조각 .${segmentExtension(playlist)} · " +
+                "초기화조각 ${if (playlist.initSegmentUrl != null) "있음(fMP4)" else "없음(TS)"} · " +
+                "암호화 ${if (playlist.segments.any { it.key != null }) "AES-128" else "없음"}",
+        )
+
         if (playlist.isLive) {
             throw IOException("라이브 스트림은 끝이 없어 통째로 받을 수 없다")
         }
@@ -216,6 +230,7 @@ object HlsDownloader {
             out.flush()
         }
 
+        DebugLog.log("HLS", "받기 끝 · ${written}바이트 기록")
         Outcome(bytes = written, isFragmentedMp4 = playlist.initSegmentUrl != null)
     }
 

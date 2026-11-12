@@ -6,6 +6,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.aiutil.videodownloader.core.DebugLog
 import com.aiutil.videodownloader.data.DownloadHistoryStore
 import com.aiutil.videodownloader.data.DownloadStore
 import com.aiutil.videodownloader.model.DownloadItem
@@ -195,6 +196,8 @@ class DownloadManagerCore(
         if (item.status == DownloadStatus.CANCELED) return
 
         store.update(id) { it.copy(status = DownloadStatus.RUNNING) }
+        DebugLog.log("받기", "시작 · ${item.kind} · ${item.title.take(40)}")
+        DebugLog.log("받기", "주소 ${item.url.take(140)}")
         val part = partFile(id)
 
         try {
@@ -229,6 +232,7 @@ class DownloadManagerCore(
         } catch (t: Throwable) {
             Log.w(TAG, "다운로드 실패: ${item.url}", t)
             val reason = t.message ?: t::class.java.simpleName
+            DebugLog.log("받기", "실패 · ${t::class.java.simpleName} · $reason")
             store.update(id) { it.copy(status = DownloadStatus.FAILED, errorMessage = reason) }
             history.markFinished(id, DownloadStatus.FAILED, sizeBytes = -1)
             store.get(id)?.let { Notifications.showFailed(appContext, it, reason) }
@@ -291,6 +295,17 @@ class DownloadManagerCore(
                 errorMessage = note,
             )
         }
+        DebugLog.log(
+            "저장",
+            "$fileName · ${saved.displayPath} · 변환 ${
+                when (remuxed) {
+                    true -> "성공"
+                    false -> "실패"
+                    null -> "해당없음"
+                }
+            }",
+        )
+
         val finished = store.get(id)
         history.markFinished(
             downloadId = id,
@@ -322,6 +337,7 @@ class DownloadManagerCore(
             file.delete()
             throw IOException("받은 파일을 재생할 수 없습니다. 영상 주소가 아닐 수 있습니다")
         }
+        DebugLog.log("검증", "통과 · ${file.length()}바이트")
     }
 
     private fun isPlayable(file: File): Boolean {

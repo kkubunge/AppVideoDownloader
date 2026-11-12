@@ -75,8 +75,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiutil.videodownloader.App
 import com.aiutil.videodownloader.BuildConfig
 import com.aiutil.videodownloader.browser.TabManager
+import com.aiutil.videodownloader.core.DebugLog
 import com.aiutil.videodownloader.model.DetectedVideo
 import com.aiutil.videodownloader.model.DownloadStatus
+import com.aiutil.videodownloader.util.Clip
 import kotlinx.coroutines.flow.MutableStateFlow
 
 @Composable
@@ -102,6 +104,7 @@ fun BrowserScreen(
 
     val bookmarks by App.bookmarks.items.collectAsStateWithLifecycle()
     val history by App.history.items.collectAsStateWithLifecycle()
+    val debugLines by DebugLog.lines.collectAsStateWithLifecycle()
 
     // 받기를 눌러 보기 전에 '받음' 표시를 하기 위한 주소 모음.
     // 페이지 주소까지 대조하면 같은 페이지의 모든 영상이 받은 것으로 표시되므로
@@ -307,6 +310,16 @@ fun BrowserScreen(
             onDismiss = { viewModel.sheet = null },
         )
 
+        BrowserViewModel.Sheet.DEBUG -> DebugLogSheet(
+            lines = debugLines,
+            onCopy = {
+                Clip.copy(context, DebugLog.dump(), label = "동작 기록")
+                viewModel.notify("기록을 복사했습니다")
+            },
+            onClear = { DebugLog.clear() },
+            onDismiss = { viewModel.sheet = null },
+        )
+
         BrowserViewModel.Sheet.HISTORY -> DownloadHistorySheet(
             entries = history,
             onClear = {
@@ -463,6 +476,14 @@ private fun AddressBar(
                     )
 
                     HorizontalDivider()
+
+                    DropdownMenuItem(
+                        text = { Text("동작 기록 (디버그)") },
+                        onClick = {
+                            menuOpen = false
+                            viewModel.sheet = BrowserViewModel.Sheet.DEBUG
+                        },
+                    )
 
                     // 설치된 것이 어느 빌드인지 바로 확인하기 위한 표시.
                     DropdownMenuItem(

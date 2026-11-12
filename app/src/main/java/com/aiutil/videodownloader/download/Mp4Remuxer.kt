@@ -5,6 +5,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.util.Log
+import com.aiutil.videodownloader.core.DebugLog
 import java.io.File
 import java.nio.ByteBuffer
 
@@ -36,6 +37,7 @@ object Mp4Remuxer {
 
     /** @return 성공하면 true. 실패 시 [dst]는 정리된다. */
     fun remux(src: File, dst: File): Boolean {
+        DebugLog.log("변환", "시작 · 원본 ${src.length()}바이트")
         val extractor = MediaExtractor()
         var muxer: MediaMuxer? = null
         var muxerStarted = false
@@ -58,6 +60,7 @@ object Mp4Remuxer {
                 if (mime.startsWith("video/")) videoTracks += i
                 extractor.selectTrack(i)
                 trackMap[i] = muxer.addTrack(format)
+                DebugLog.log("변환", "트랙 $i · $mime")
             }
             check(trackMap.isNotEmpty()) { "옮길 영상/음성 트랙이 없다" }
 
@@ -122,10 +125,12 @@ object Mp4Remuxer {
 
             check(written > 0) { "옮긴 샘플이 하나도 없다" }
             lastFailure = null
+            DebugLog.log("변환", "성공 · 샘플 ${written}개 · ${dst.length()}바이트")
             true
         } catch (t: Throwable) {
             Log.w(TAG, "MP4 변환 실패, 원본을 그대로 쓴다", t)
             lastFailure = "${t::class.java.simpleName}: ${t.message ?: "원인 불명"}"
+            DebugLog.log("변환", "실패 · $lastFailure")
             false
         } finally {
             runCatching { extractor.release() }
