@@ -113,20 +113,26 @@ class VideoJsBridge(
 
           function scan() {
             var all = [];
-            var visible = [];
+            var entries = [];
             var visibleCount = 0;
 
             var videos = document.querySelectorAll('video');
             for (var i = 0; i < videos.length; i++) {
               var v = videos[i];
               var srcs = srcsOf(v);
-              var onScreen = visibleRatio(v) >= ${VISIBLE_RATIO};
+              var ratio = visibleRatio(v);
+              var onScreen = ratio >= ${VISIBLE_RATIO};
               if (onScreen) visibleCount++;
               for (var j = 0; j < srcs.length; j++) {
                 all.push(srcs[j]);
-                if (onScreen) visible.push(srcs[j]);
+                if (onScreen) entries.push({ u: srcs[j], r: ratio });
               }
             }
+
+            // 많이 보이는 것부터 앞에 둔다. 앱은 이 순서를 그대로 목록에 쓴다.
+            entries.sort(function (a, b) { return b.r - a.r; });
+            var visible = [];
+            for (var n = 0; n < entries.length; n++) visible.push(entries[n].u);
 
             var extra = document.querySelectorAll(
               'source[type*="video"], source[type*="mpegurl"], a[href*=".mp4"], a[href*=".m3u8"]'

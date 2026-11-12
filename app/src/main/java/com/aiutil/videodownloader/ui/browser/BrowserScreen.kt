@@ -60,6 +60,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiutil.videodownloader.App
 import com.aiutil.videodownloader.browser.TabManager
 import com.aiutil.videodownloader.model.DetectedVideo
+import com.aiutil.videodownloader.model.DownloadStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 
 @Composable
@@ -85,6 +86,16 @@ fun BrowserScreen(
 
     val bookmarks by App.bookmarks.items.collectAsStateWithLifecycle()
     val history by App.history.items.collectAsStateWithLifecycle()
+
+    // 받기를 눌러 보기 전에 '받음' 표시를 하기 위한 주소 모음.
+    // 페이지 주소까지 대조하면 같은 페이지의 모든 영상이 받은 것으로 표시되므로
+    // 영상 주소만 쓴다.
+    val downloadedUrls = remember(history) {
+        history.asSequence()
+            .filter { it.status == DownloadStatus.COMPLETED }
+            .map { normalizeUrl(it.url) }
+            .toSet()
+    }
 
     LaunchedEffect(activeTab?.id, activeTab?.url) {
         viewModel.syncAddress(activeTab?.url.orEmpty())
@@ -176,6 +187,7 @@ fun BrowserScreen(
         BrowserViewModel.Sheet.DETECTED -> DetectedVideoSheet(
             onScreenVideos = onScreen,
             allVideos = detected,
+            downloadedUrls = downloadedUrls,
             onDownload = {
                 viewModel.sheet = null
                 viewModel.onDownloadRequested(it)

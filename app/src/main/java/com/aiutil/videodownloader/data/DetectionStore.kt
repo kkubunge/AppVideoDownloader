@@ -30,7 +30,8 @@ class DetectionStore {
 
     private var currentPage: String = ""
 
-    /** DOM에서 확인한, 화면에 보이는 영상의 주소. */
+    /** DOM에서 확인한, 화면에 보이는 영상의 주소. 많이 보이는 것부터 정렬돼 있다. */
+    private var onScreenOrder: List<String> = emptyList()
     private val onScreenUrls = mutableSetOf<String>()
 
     /** 화면에 보이는 <video> 요소 수. 주소를 못 얻는 blob 스트림도 세어진다. */
@@ -75,11 +76,17 @@ class DetectionStore {
     @Synchronized
     fun markInspected(url: String): Boolean = inspected.put(url, Unit) == null
 
+    /**
+     * 새로 찾은 영상을 **앞에** 넣는다.
+     *
+     * 뒤에 붙이면 목록 맨 위가 늘 '맨 처음 감지된 영상'으로 고정돼, 스크롤해서 새 영상을
+     * 봐도 정작 받고 싶은 것은 한참 아래에 묻힌다.
+     */
     @Synchronized
     fun add(video: DetectedVideo) {
         val existing = _videos.value
         if (existing.any { it.url == video.url }) return
-        _videos.value = (existing + video).takeLast(MAX_VIDEOS)
+        _videos.value = (listOf(video) + existing).take(MAX_VIDEOS)
         recomputeOnScreen()
     }
 
@@ -92,8 +99,9 @@ class DetectionStore {
      */
     @Synchronized
     fun setOnScreen(urls: List<String>, count: Int, changed: Boolean) {
+        onScreenOrder = urls.map { normalize(it) }
         onScreenUrls.clear()
-        urls.forEach { onScreenUrls.add(normalize(it)) }
+        onScreenUrls.addAll(onScreenOrder)
         onScreenCount = count
         if (changed) focusChangedAt = System.currentTimeMillis()
         recomputeOnScreen()
@@ -121,16 +129,25 @@ class DetectionStore {
         }
 
         val focus = focusChangedAt
-        _onScreenVideos.value = _videos.value.filter { video ->
+        val matched = _videos.value.filter { video ->
             normalize(video.url) in onScreenUrls ||
                 (focus > 0 && video.detectedAt in (focus - MATCH_BEFORE_MS)..(focus + MATCH_AFTER_MS))
         }
+
+        // 화면에 많이 보이는 것이 위로. 주소를 못 맞춘(시점으로만 짝지은) 것은 그 뒤에
+        // 최근 순으로 둔다.
+        _onScreenVideos.value = matched.sortedWith(
+            compareBy<DetectedVideo> { video ->
+                onScreenOrder.indexOf(normalize(video.url)).takeIf { it >= 0 } ?: Int.MAX_VALUE
+            }.thenByDescending { it.detectedAt }
+        )
     }
 
     private fun reset(pageUrl: String) {
         currentPage = pageUrl
         _videos.value = emptyList()
         _onScreenVideos.value = emptyList()
+        onScreenOrder = emptyList()
         onScreenUrls.clear()
         onScreenCount = 0
         focusChangedAt = 0L

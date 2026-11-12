@@ -41,6 +41,7 @@ import com.aiutil.videodownloader.util.Format
 fun DetectedVideoSheet(
     onScreenVideos: List<DetectedVideo>,
     allVideos: List<DetectedVideo>,
+    downloadedUrls: Set<String>,
     onDownload: (DetectedVideo) -> Unit,
     onClear: () -> Unit,
     onDismiss: () -> Unit,
@@ -103,15 +104,26 @@ fun DetectedVideoSheet(
             contentPadding = PaddingValues(vertical = 8.dp),
         ) {
             items(shown, key = { it.url }) { video ->
-                DetectedVideoRow(video = video, onDownload = { onDownload(video) })
+                DetectedVideoRow(
+                    video = video,
+                    alreadyDownloaded = normalizeUrl(video.url) in downloadedUrls,
+                    onDownload = { onDownload(video) },
+                )
             }
         }
     }
 }
 
+/** 목록 어디서든 같은 방식으로 주소를 맞춰 보기 위한 정규화. */
+fun normalizeUrl(url: String): String = url.substringBefore('#').trimEnd('/')
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DetectedVideoRow(video: DetectedVideo, onDownload: () -> Unit) {
+private fun DetectedVideoRow(
+    video: DetectedVideo,
+    alreadyDownloaded: Boolean,
+    onDownload: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -133,7 +145,14 @@ private fun DetectedVideoRow(video: DetectedVideo, onDownload: () -> Unit) {
             ) {
                 AssistChip(
                     onClick = onDownload,
-                    label = { Text(if (video.kind == MediaKind.HLS) "스트리밍" else "파일") },
+                    label = {
+                        Text(
+                            // 눌러 보기 전에 이미 받은 것인지 알 수 있어야 한다.
+                            if (alreadyDownloaded) "받음"
+                            else if (video.kind == MediaKind.HLS) "스트리밍"
+                            else "파일"
+                        )
+                    },
                 )
                 Text(
                     text = buildString {
