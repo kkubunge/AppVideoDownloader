@@ -2,6 +2,7 @@ package com.aiutil.videodownloader.download
 
 import android.content.Context
 import android.content.Intent
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -20,6 +21,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.io.File
+import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -199,6 +201,8 @@ class DownloadManagerCore(
 
     private fun publish(id: String, source: File, extension: String) {
         val item = store.get(id) ?: return
+        validateOrThrow(source)
+
         val fileName = Names.withExtension(item.fileName, extension)
         val saved = MediaStoreSaver.save(
             context = appContext,
@@ -229,6 +233,47 @@ class DownloadManagerCore(
         finished?.let { Notifications.showCompleted(appContext, it) }
     }
 
+    /**
+     * 저장하기 전에 받은 것이 정말 영상인지 확인한다.
+     *
+     * 주소가 만료됐거나 로그인이 필요하면 서버가 오류 페이지(HTML)를 200으로 돌려준다.
+     * 그대로 저장하면 보관함에 0바이트거나 재생되지 않는 파일이 쌓인다.
+     * 쓸 수 없는 파일은 지워서, 다시 시도할 때 처음부터 받게 한다.
+     */
+    private fun validateOrThrow(file: File) {
+        if (!file.exists() || file.length() == 0L) {
+            file.delete()
+            throw IOException("받은 파일이 비어 있습니다. 주소가 만료됐거나 로그인이 필요한 영상일 수 있습니다")
+        }
+        if (file.length() < MIN_VALID_BYTES) {
+            val size = file.length()
+            file.delete()
+            throw IOException("받은 내용이 영상이 아닙니다 (${size}바이트)")
+        }
+        if (!isPlayable(file)) {
+            file.delete()
+            throw IOException("받은 파일을 재생할 수 없습니다. 영상 주소가 아닐 수 있습니다")
+        }
+    }
+
+    private fun isPlayable(file: File): Boolean {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.absolutePath)
+            val duration = retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull() ?: 0L
+            val hasVideo =
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) == "yes"
+            duration > 0L || hasVideo
+        } catch (t: Throwable) {
+            Log.w(TAG, "받은 파일을 읽지 못했다: ${file.name}", t)
+            false
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+
     private fun ensureServiceRunning() {
         runCatching {
             ContextCompat.startForegroundService(
@@ -243,5 +288,8 @@ class DownloadManagerCore(
 
         /** 동시에 받는 개수. 모바일 회선에서 이보다 늘리면 오히려 느려진다. */
         const val MAX_CONCURRENT = 3
+
+        /** 이보다 작으면 영상이 아니라 오류 페이지로 본다. */
+        const val MIN_VALID_BYTES = 32L * 1024
     }
 }

@@ -21,6 +21,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
@@ -29,6 +31,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -158,18 +161,41 @@ fun BrowserScreen(
                 StartPage(onOpen = viewModel::open, modifier = Modifier.fillMaxSize())
             }
 
-            // 화면에 보이는 것을 우선 센다. 보이는 게 없을 때만 페이지 전체 수를 보여준다 —
-            // 0개라고 표시해 버리면 받을 방법이 사라진다.
-            val badgeCount = if (onScreen.isNotEmpty()) onScreen.size else detected.size
-            if (badgeCount > 0) {
-                ExtendedFloatingActionButton(
-                    onClick = { viewModel.sheet = BrowserViewModel.Sheet.DETECTED },
-                    icon = { Icon(Icons.Default.VideoLibrary, contentDescription = null) },
-                    text = { Text("영상 ${badgeCount}개") },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(16.dp),
-                )
+            // 화면에 보이는 영상이 있으면 그것 하나를 바로 받게 한다. 목록을 펼쳐
+            // 고르는 과정이 피드에서는 오히려 번거롭다. 목록은 옆 버튼으로 남긴다.
+            val primary = onScreen.firstOrNull()
+
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (detected.size > 1) {
+                    FilledTonalIconButton(
+                        onClick = { viewModel.sheet = BrowserViewModel.Sheet.DETECTED },
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.List,
+                            contentDescription = "영상 목록 ${detected.size}개",
+                        )
+                    }
+                }
+
+                when {
+                    primary != null -> ExtendedFloatingActionButton(
+                        onClick = { viewModel.onDownloadRequested(primary) },
+                        icon = { Icon(Icons.Default.Download, contentDescription = null) },
+                        text = { Text("이 영상 받기") },
+                    )
+
+                    detected.isNotEmpty() -> ExtendedFloatingActionButton(
+                        onClick = { viewModel.sheet = BrowserViewModel.Sheet.DETECTED },
+                        icon = { Icon(Icons.Default.VideoLibrary, contentDescription = null) },
+                        text = { Text("영상 ${detected.size}개") },
+                    )
+                }
             }
 
             if (viewModel.resolving) {
