@@ -21,9 +21,16 @@
 4. `compileSdk 35` 를 쓰므로 SDK Manager에서 **Android 15 (API 35)** 를 설치
 5. 기기 또는 에뮬레이터 선택 후 Run
 
+### 빌드된 APK 바로 받기 (설치 없이)
+
+로컬에 아무것도 깔지 않고 받으려면 **[Releases의 `latest`](https://github.com/kkubunge/AppVideoDownloader/releases/tag/latest)** 에서
+`VideoDownloader-debug.apk`를 내려받으면 됩니다. master에 푸시될 때마다 GitHub Actions가
+빌드해서 이 릴리스를 갱신합니다. 설치하려면 기기에서 '출처를 알 수 없는 앱 설치'를 허용해야 합니다.
+
 ### 검증 상태
-**이 코드는 아직 한 번도 컴파일되지 않았습니다.** 작성자(AI)의 환경에 Android 툴체인이 없어
-빌드 검증을 못 했습니다. 첫 Sync에서 의존성 버전 충돌이나 사소한 컴파일 오류가 날 수 있습니다.
+**컴파일은 CI에서 통과합니다** (`.github/workflows/android-build.yml`, `assembleDebug`).
+다만 기기에서의 동작 — 영상 감지 정확도, HLS 병합 결과, 저장소 동작 — 은 실기기 테스트가
+필요하며 아직 검증되지 않았습니다.
 
 ### 버전 조합
 | 항목 | 버전 |
