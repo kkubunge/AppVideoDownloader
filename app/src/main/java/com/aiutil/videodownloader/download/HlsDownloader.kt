@@ -241,8 +241,20 @@ object HlsDownloader {
         }
 
     private fun fetchBytes(url: String, headers: Map<String, String>): ByteArray =
-        Http.client.newCall(Http.requestBuilder(url, headers).get().build()).execute().use {
-            if (!it.isSuccessful) throw IOException("조각을 받지 못했다 (${it.code}) $url")
-            it.body?.bytes() ?: throw IOException("조각이 비어 있다")
+        Http.client.newCall(Http.requestBuilder(url, headers).get().build()).execute().use { resp ->
+            if (!resp.isSuccessful) throw IOException("조각을 받지 못했다 (${resp.code})")
+
+            // 오류를 404가 아니라 200 + HTML/JSON으로 돌려주는 서버가 많다.
+            // 그대로 이어 붙이면 재생되지 않는 파일이 만들어진다.
+            val type = resp.header("Content-Type")?.lowercase().orEmpty()
+            if (TEXTUAL_TYPES.any { it in type }) {
+                throw IOException("조각 대신 오류 응답을 받았습니다. 주소가 만료됐거나 로그인이 필요할 수 있습니다")
+            }
+
+            val bytes = resp.body?.bytes() ?: throw IOException("조각이 비어 있다")
+            if (bytes.isEmpty()) throw IOException("조각이 비어 있다")
+            bytes
         }
+
+    private val TEXTUAL_TYPES = listOf("text/", "html", "json", "xml")
 }

@@ -27,9 +27,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiutil.videodownloader.App
@@ -80,7 +82,6 @@ fun AppRoot(viewModel: BrowserViewModel, tabManager: TabManager) {
 
     Scaffold(
         modifier = Modifier.imePadding(),
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             if (!keyboardVisible) {
                 NavigationBar {
@@ -122,6 +123,14 @@ fun AppRoot(viewModel: BrowserViewModel, tabManager: TabManager) {
                     modifier = Modifier.fillMaxSize(),
                 )
             }
+
+            // 기본 위치(화면 아래)는 방금 누른 '받기' 버튼을 덮는다. 위쪽에 띄운다.
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
         }
     }
 }
