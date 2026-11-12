@@ -83,13 +83,23 @@ class SnifferWebViewClient(
         if (request.method.equals("GET", ignoreCase = true)) {
             val url = request.url.toString()
             val headers = buildMap<String, String> {
-                request.requestHeaders?.forEach { (k, v) -> if (!k.equals("Range", true)) put(k, v) }
+                // 브라우저 헤더를 통째로 물려주면 안 된다. Accept가 text/html이면
+                // 조각 대신 HTML을 돌려주는 CDN이 있고, Accept-Encoding을 직접 넘기면
+                // OkHttp가 압축을 풀어 주지 않아 파일이 깨진다.
+                request.requestHeaders?.forEach { (k, v) ->
+                    if (k.lowercase() in FORWARDED_HEADERS) put(k, v)
+                }
                 putAll(downloadHeaders(url))
             }
             VideoSniffer.offer(scope, detections, url, headers, currentUrl, currentTitle)
         }
         // 응답은 건드리지 않는다. 관찰만 한다.
         return null
+    }
+
+    private companion object {
+        /** 다운로드에 실제로 필요한 헤더만 물려준다. */
+        val FORWARDED_HEADERS = setOf("user-agent", "referer", "origin", "cookie", "authorization")
     }
 
     private fun originOf(url: String): String? = runCatching {

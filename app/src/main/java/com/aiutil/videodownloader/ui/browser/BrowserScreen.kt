@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -299,9 +300,10 @@ private fun AddressBar(
     val activeTab = tabManager.activeTab
     var menuOpen by remember { mutableStateOf(false) }
 
-    // tonalElevation만으로는 아래 페이지 배경과 거의 같은 색이라 주소창의 경계가
-    // 보이지 않는다. 한 단계 진한 컨테이너 색을 쓰고 아래에 구분선을 둔다.
-    Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
+    // 색 대비만으로는 테마가 어떻게 풀리느냐에 따라 묻혀 버린다.
+    // 막대는 surfaceVariant로 분명히 구분하고, 입력란에는 테두리와 아이콘을 둬서
+    // 어떤 배색에서도 위치를 알 수 있게 한다.
+    Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -315,23 +317,27 @@ private fun AddressBar(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
             }
 
+            val fieldShape = RoundedCornerShape(22.dp)
             TextField(
                 value = viewModel.addressText,
                 onValueChange = { viewModel.addressText = it },
                 modifier = Modifier
                     .weight(1f)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, fieldShape)
                     .onFocusChanged {
                         viewModel.onAddressFocusChanged(it.isFocused, activeTab?.url.orEmpty())
                     },
                 singleLine = true,
                 placeholder = { Text("주소 또는 검색어") },
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = null)
+                },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(onGo = { viewModel.submitAddress() }),
-                shape = RoundedCornerShape(22.dp),
+                shape = fieldShape,
                 colors = TextFieldDefaults.colors(
-                    // 입력란임이 한눈에 보이도록 주변보다 밝기를 분명히 달리한다.
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                     disabledIndicatorColor = Color.Transparent,

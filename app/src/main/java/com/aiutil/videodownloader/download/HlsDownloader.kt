@@ -6,6 +6,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -44,22 +45,22 @@ object HlsDownloader {
 
     suspend fun resolve(url: String, headers: Map<String, String>): Resolved =
         withContext(Dispatchers.IO) {
-            val text = fetchText(url, headers)
-            if (M3u8Parser.isMaster(text)) {
-                val variants = M3u8Parser.parseMaster(text, url)
+            val document = fetchPlaylist(url, headers)
+            if (M3u8Parser.isMaster(document.text)) {
+                val variants = M3u8Parser.parseMaster(document.text, document.baseUrl)
                 if (variants.isEmpty()) {
                     throw IOException("마스터 플레이리스트에서 화질 목록을 찾지 못했다")
                 }
                 // 재생 길이는 어느 화질이든 같다. 가장 가벼운 것 하나만 읽어 길이를 얻는다.
                 val duration = runCatching {
                     val lightest = variants.minByOrNull { it.bandwidth } ?: variants.last()
-                    M3u8Parser.parseMedia(fetchText(lightest.url, headers), lightest.url)
-                        .totalDurationSec
+                    val media = fetchPlaylist(lightest.url, headers)
+                    M3u8Parser.parseMedia(media.text, media.baseUrl).totalDurationSec
                 }.getOrDefault(0.0)
 
                 Resolved.Variants(variants, duration)
             } else {
-                val playlist = M3u8Parser.parseMedia(text, url)
+                val playlist = M3u8Parser.parseMedia(document.text, document.baseUrl)
                 Resolved.Media(url, playlist, estimateFromFirstSegment(playlist, headers))
             }
         }
@@ -111,8 +112,18 @@ object HlsDownloader {
         startBytes: Long,
         onProgress: (segmentIndex: Int, segmentCount: Int, bytes: Long) -> Unit,
     ): Outcome = withContext(Dispatchers.IO) {
-        val playlistText = fetchText(playlistUrl, headers)
-        val playlist = M3u8Parser.parseMedia(playlistText, playlistUrl)
+        val document = fetchPlaylist(playlistUrl, headers)
+
+        // 받기 직전에 마스터가 넘어오는 경우를 대비한다(주소가 바뀌었을 수 있다).
+        val media = if (M3u8Parser.isMaster(document.text)) {
+            val best = M3u8Parser.parseMaster(document.text, document.baseUrl).firstOrNull()
+                ?: throw IOException("마스터 플레이리스트에서 화질 목록을 찾지 못했다")
+            fetchPlaylist(best.url, headers)
+        } else {
+            document
+        }
+
+        val playlist = M3u8Parser.parseMedia(media.text, media.baseUrl)
 
         if (playlist.isLive) {
             throw IOException("라이브 스트림은 끝이 없어 통째로 받을 수 없다")
@@ -194,14 +205,15 @@ object HlsDownloader {
         }
     }
 
-    private fun fetchSegment(
+    private suspend fun fetchSegment(
         segment: M3u8Parser.Segment,
         headers: Map<String, String>,
         keyCache: ConcurrentHashMap<String, ByteArray>,
     ): ByteArray {
         val raw = fetchBytes(segment.url, headers)
         val key = segment.key ?: return raw
-        val keyBytes = keyCache.getOrPut(key.keyUrl) { fetchBytes(key.keyUrl, headers) }
+        val keyBytes = keyCache[key.keyUrl]
+            ?: fetchBytes(key.keyUrl, headers).also { keyCache[key.keyUrl] = it }
         return decryptAes128(raw, keyBytes, key.ivHex, segment.sequence)
     }
 
@@ -234,13 +246,40 @@ object HlsDownloader {
         }
     }
 
-    private fun fetchText(url: String, headers: Map<String, String>): String =
-        Http.client.newCall(Http.requestBuilder(url, headers).get().build()).execute().use {
-            if (!it.isSuccessful) throw IOException("플레이리스트를 받지 못했다 (${it.code})")
-            it.body?.string() ?: throw IOException("플레이리스트가 비어 있다")
+    /** 플레이리스트 본문과, 상대 경로를 풀 때 기준이 될 주소. */
+    private data class Playlist(val text: String, val baseUrl: String)
+
+    /**
+     * 플레이리스트를 받는다.
+     *
+     * 리다이렉트를 따라갔다면 조각의 상대 경로는 **최종 주소**를 기준으로 풀어야 한다.
+     * 원래 주소로 풀면 전혀 다른 곳을 가리키게 되고, 서버는 보통 오류 페이지를 돌려준다.
+     */
+    private fun fetchPlaylist(url: String, headers: Map<String, String>): Playlist =
+        Http.client.newCall(Http.requestBuilder(url, headers).get().build()).execute().use { resp ->
+            if (!resp.isSuccessful) throw IOException("플레이리스트를 받지 못했다 (${resp.code})")
+            val body = resp.body?.string() ?: throw IOException("플레이리스트가 비어 있다")
+            if (!body.contains("#EXTM3U")) {
+                throw IOException("플레이리스트가 아닌 응답을 받았습니다. 주소가 만료됐을 수 있습니다")
+            }
+            Playlist(body, resp.request.url.toString())
         }
 
-    private fun fetchBytes(url: String, headers: Map<String, String>): ByteArray =
+    /** 한 번 끊겼다고 전체가 날아가면 아깝다. 몇 번 더 시도해 본다. */
+    private suspend fun fetchBytes(url: String, headers: Map<String, String>): ByteArray {
+        var last: IOException? = null
+        repeat(SEGMENT_ATTEMPTS) { attempt ->
+            try {
+                return fetchBytesOnce(url, headers)
+            } catch (e: IOException) {
+                last = e
+                if (attempt < SEGMENT_ATTEMPTS - 1) delay(RETRY_DELAY_MS * (attempt + 1))
+            }
+        }
+        throw last ?: IOException("조각을 받지 못했다")
+    }
+
+    private fun fetchBytesOnce(url: String, headers: Map<String, String>): ByteArray =
         Http.client.newCall(Http.requestBuilder(url, headers).get().build()).execute().use { resp ->
             if (!resp.isSuccessful) throw IOException("조각을 받지 못했다 (${resp.code})")
 
@@ -248,7 +287,11 @@ object HlsDownloader {
             // 그대로 이어 붙이면 재생되지 않는 파일이 만들어진다.
             val type = resp.header("Content-Type")?.lowercase().orEmpty()
             if (TEXTUAL_TYPES.any { it in type }) {
-                throw IOException("조각 대신 오류 응답을 받았습니다. 주소가 만료됐거나 로그인이 필요할 수 있습니다")
+                throw IOException(
+                    "조각 대신 오류 응답을 받았습니다 " +
+                        "(${resp.code} ${type.substringBefore(';')} · ${hostOf(url)}). " +
+                        "주소가 만료됐거나 로그인이 필요할 수 있습니다"
+                )
             }
 
             val bytes = resp.body?.bytes() ?: throw IOException("조각이 비어 있다")
@@ -256,5 +299,12 @@ object HlsDownloader {
             bytes
         }
 
+    private fun hostOf(url: String): String =
+        runCatching { java.net.URL(url).host }.getOrDefault("")
+
     private val TEXTUAL_TYPES = listOf("text/", "html", "json", "xml")
+
+    /** 조각 하나를 포기하기 전까지의 시도 횟수. */
+    private const val SEGMENT_ATTEMPTS = 3
+    private const val RETRY_DELAY_MS = 400L
 }
