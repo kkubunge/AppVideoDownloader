@@ -34,14 +34,25 @@ class VideoJsBridge(
             }
 
             detections.setOnScreen(
-                urls = toList(json.optJSONArray("visible")),
-                posters = toList(json.optJSONArray("posters")),
-                link = json.optString("link").takeIf { it.isNotBlank() },
+                items = parseItems(json.optJSONArray("items")),
                 count = json.optInt("visibleCount", 0),
                 changed = json.optBoolean("changed", false),
             )
         } catch (t: Throwable) {
             Log.w(TAG, "화면 스캔 결과 처리 실패", t)
+        }
+    }
+
+    /** 화면에 보이는 영상 하나하나를, 많이 보이는 순서 그대로. */
+    private fun parseItems(array: JSONArray?): List<DetectionStore.ScreenItem> {
+        if (array == null) return emptyList()
+        return (0 until array.length()).mapNotNull { index ->
+            val item = array.optJSONObject(index) ?: return@mapNotNull null
+            DetectionStore.ScreenItem(
+                urls = toList(item.optJSONArray("s")),
+                posterUrl = item.optString("p").takeIf { it.isNotBlank() },
+                link = item.optString("l").takeIf { it.isNotBlank() },
+            )
         }
     }
 
@@ -208,14 +219,12 @@ class VideoJsBridge(
             // 많이 보이는 것부터 앞에 둔다. 앱은 이 순서를 그대로 목록에 쓴다.
             items.sort(function (a, b) { return b.r - a.r; });
 
-            var visible = [];
-            var posters = [];
+            // 항목별로 따로 보낸다. 하나로 뭉치면 어느 글의 영상인지 알 수 없어
+            // 엉뚱한 글 주소가 붙는다.
+            var payload = [];
             var key = '';
-            // 가장 많이 보이는 것의 글 주소를 대표로 쓴다.
-            var link = items.length > 0 ? items[0].l : '';
             for (var n = 0; n < items.length; n++) {
-              for (var m = 0; m < items[n].s.length; m++) visible.push(items[n].s[m]);
-              if (items[n].p) posters.push(items[n].p);
+              payload.push({ s: items[n].s, p: items[n].p, l: items[n].l });
               key += items[n].id + '|';
             }
 
@@ -242,9 +251,7 @@ class VideoJsBridge(
 
             bridge.onScan(JSON.stringify({
               all: all,
-              visible: visible,
-              posters: posters,
-              link: link,
+              items: payload,
               visibleCount: visibleCount,
               changed: changed
             }));

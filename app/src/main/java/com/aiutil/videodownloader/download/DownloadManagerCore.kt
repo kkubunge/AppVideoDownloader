@@ -235,22 +235,22 @@ class DownloadManagerCore(
         }
     }
 
-    /** HLS 결과를 재생 가능한 컨테이너로 정리한 뒤 저장한다. */
+    /**
+     * HLS 결과를 재생 가능한 컨테이너로 정리한 뒤 저장한다.
+     *
+     * 조각난 MP4(fMP4)도 반드시 거쳐야 한다. 조각을 이어 붙인 것만으로는 색인이
+     * 없어서, 확장자가 mp4여도 갤러리와 기본 재생기가 열지 못한다.
+     */
     private fun publishHls(id: String, part: File, outcome: HlsDownloader.Outcome) {
-        if (outcome.isFragmentedMp4) {
-            // 이미 MP4 조각을 이어 붙인 결과라 그대로 쓸 수 있다.
-            publish(id, part, "mp4")
+        val remuxed = File(part.parentFile, "$id.mp4")
+        if (Mp4Remuxer.remux(part, remuxed)) {
+            part.delete()
+            publish(id, remuxed, "mp4")
             return
         }
 
-        val remuxed = File(part.parentFile, "$id.mp4")
-        if (TsRemuxer.remux(part, remuxed)) {
-            part.delete()
-            publish(id, remuxed, "mp4")
-        } else {
-            // 변환이 안 되면 TS 그대로 둔다. 대부분의 플레이어는 재생할 수 있다.
-            publish(id, part, "ts")
-        }
+        // 변환이 안 되면 받은 그대로 둔다. 전용 재생기로는 열 수 있다.
+        publish(id, part, if (outcome.isFragmentedMp4) "mp4" else "ts")
     }
 
     private fun publish(id: String, source: File, extension: String) {

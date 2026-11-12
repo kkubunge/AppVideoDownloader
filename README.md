@@ -97,7 +97,7 @@ app/src/main/java/com/aiutil/videodownloader/
 │  ├─ FileDownloader.kt         Range 이어받기 단일 파일 다운로드
 │  ├─ HlsDownloader.kt          세그먼트 병렬 선취 + AES-128 복호화 + 이어받기
 │  ├─ M3u8Parser.kt             마스터/미디어 플레이리스트 파서
-│  ├─ TsRemuxer.kt              MediaExtractor+MediaMuxer로 TS→MP4
+│  ├─ Mp4Remuxer.kt             MediaExtractor+MediaMuxer로 TS·fMP4 → 보통 MP4
 │  ├─ MediaStoreSaver.kt        완료 파일을 공용 저장소로 이동
 │  ├─ DownloadService.kt        포그라운드 서비스(프로세스 유지 + 알림)
 │  └─ Notifications.kt          알림 채널/빌더
@@ -146,7 +146,7 @@ DetectedVideo ─▶ DownloadManagerCore.enqueue
 FileDownloader              HlsDownloader
 (Range 이어받기)        (세그먼트 3개 선취, AES-128 복호화)
      │                           │
-     │                    TS면 TsRemuxer로 MP4 변환 (실패 시 .ts 유지)
+     │                    Mp4Remuxer로 색인 있는 MP4로 변환 (실패 시 원본 유지)
      └─────────────┬─────────────┘
                    ▼
       캐시(.part) ──▶ MediaStoreSaver ──▶ Movies/동영상 다운로더/

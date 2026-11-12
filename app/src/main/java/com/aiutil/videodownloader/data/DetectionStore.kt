@@ -31,17 +31,26 @@ class DetectionStore {
 
     private var currentPage: String = ""
 
-    /** DOM에서 확인한, 화면에 보이는 영상의 주소. 많이 보이는 것부터 정렬돼 있다. */
-    private var onScreenOrder: List<String> = emptyList()
-    private val onScreenUrls = mutableSetOf<String>()
-
     /**
-     * 화면에 보이는 영상의 미디어 번호.
+     * 화면에 보이는 영상 하나. 많이 보이는 순서대로 들어온다.
      *
-     * 썸네일 주소와 스트림 주소가 같은 번호를 공유하는 사이트가 많다(X가 그렇다).
-     * src가 blob이라 주소를 못 얻어도 이 번호로는 짝지을 수 있다.
+     * 항목별로 따로 들고 있어야 어느 글의 영상인지 가릴 수 있다. 전부 뭉쳐 두면
+     * 받은 영상에 이웃 글의 주소가 붙는다.
      */
-    private val onScreenKeys = mutableSetOf<String>()
+    data class ScreenItem(
+        val urls: List<String>,
+        val posterUrl: String?,
+        val link: String?,
+    )
+
+    /** [ScreenItem]을 주소·미디어 번호로 빨리 찾기 위해 미리 펼쳐 둔 값. */
+    private class ItemIndex(
+        val urls: Set<String>,
+        val keys: Set<String>,
+        val link: String?,
+    )
+
+    private var itemIndex: List<ItemIndex> = emptyList()
 
     /** 화면에 보이는 <video> 요소 수. 주소를 못 얻는 blob 스트림도 세어진다. */
     private var onScreenCount = 0
@@ -49,13 +58,6 @@ class DetectionStore {
     /** 보이는 영상이 마지막으로 바뀐 시각. */
     private var focusChangedAt = 0L
 
-    /**
-     * 지금 보고 있는 영상이 실린 글의 고유 주소.
-     *
-     * 피드에서는 주소창이 늘 피드 주소다. 그걸 그대로 쓰면 '원본 페이지 열기'가
-     * 피드로 가고, 전에 받은 영상인지 가려낼 때도 피드의 모든 영상이 하나로 묶인다.
-     */
-    private var onScreenLink: String? = null
 
     /**
      * 이미 검토한 주소. HEAD 요청을 중복으로 날리지 않기 위한 기록이며,
@@ -116,21 +118,18 @@ class DetectionStore {
      * @param changed 직전 보고와 견줘 보이는 영상이 바뀌었는지
      */
     @Synchronized
-    fun setOnScreen(
-        urls: List<String>,
-        posters: List<String>,
-        link: String?,
-        count: Int,
-        changed: Boolean,
-    ) {
-        onScreenLink = link
-        onScreenOrder = urls.map { normalize(it) }
-        onScreenUrls.clear()
-        onScreenUrls.addAll(onScreenOrder)
-
-        onScreenKeys.clear()
-        posters.forEach { onScreenKeys.addAll(mediaKeys(it)) }
-        urls.forEach { onScreenKeys.addAll(mediaKeys(it)) }
+    fun setOnScreen(items: List<ScreenItem>, count: Int, changed: Boolean) {
+        itemIndex = items.map { item ->
+            val keys = buildSet {
+                item.posterUrl?.let { addAll(mediaKeys(it)) }
+                item.urls.forEach { addAll(mediaKeys(it)) }
+            }
+            ItemIndex(
+                urls = item.urls.mapTo(HashSet()) { normalize(it) },
+                keys = keys,
+                link = item.link,
+            )
+        }
 
         onScreenCount = count
         if (changed) focusChangedAt = System.currentTimeMillis()
@@ -159,40 +158,51 @@ class DetectionStore {
         }
 
         val focus = focusChangedAt
-        val ranked = _videos.value
-            .mapNotNull { video -> rankOf(video, focus)?.let { video to it } }
+        val matched = _videos.value.mapNotNull { video ->
+            matchOf(video, focus)?.let { video to it }
+        }
 
         // 확실한 짝(주소 → 미디어 번호 → 시점) 순으로, 같은 등급 안에서는 최근 것부터.
-        val link = onScreenLink
-        _onScreenVideos.value = ranked
-            .sortedWith(compareBy<Pair<DetectedVideo, Int>> { it.second }
+        _onScreenVideos.value = matched
+            .sortedWith(compareBy<Pair<DetectedVideo, Match>> { it.second.rank }
                 .thenByDescending { it.first.detectedAt })
-            .map { (video, _) ->
+            .map { (video, match) ->
                 // 피드 주소 대신 그 영상이 실린 글의 주소를 달아 준다.
-                if (link.isNullOrBlank()) video else video.copy(pageUrl = link)
+                // 어느 글의 것인지 가리지 못했다면 건드리지 않는다.
+                if (match.link.isNullOrBlank()) video else video.copy(pageUrl = match.link)
             }
     }
+
+    private class Match(val rank: Int, val link: String?)
 
     /**
      * 화면에 보이는 영상으로 칠 수 있는지, 그리고 얼마나 확실한지.
      *
      * @return 작을수록 확실한 짝. null이면 화면 밖으로 본다.
      */
-    private fun rankOf(video: DetectedVideo, focus: Long): Int? {
+    private fun matchOf(video: DetectedVideo, focus: Long): Match? {
         val key = normalize(video.url)
+        val penalty = subtitlePenalty(video.url)
 
         // 1) DOM이 알려준 주소와 그대로 일치. 많이 보이는 순서를 그대로 쓴다.
-        val index = onScreenOrder.indexOf(key)
-        if (index >= 0) return index + subtitlePenalty(video.url)
+        itemIndex.forEachIndexed { index, item ->
+            if (key in item.urls) return Match(index + penalty, item.link)
+        }
 
         // 2) 썸네일과 같은 미디어 번호를 공유. blob 스트림을 짝짓는 주된 방법이다.
-        if (onScreenKeys.isNotEmpty() && mediaKeys(video.url).any { it in onScreenKeys }) {
-            return RANK_MEDIA_KEY + subtitlePenalty(video.url)
+        val videoKeys = mediaKeys(video.url)
+        if (videoKeys.isNotEmpty()) {
+            itemIndex.forEachIndexed { index, item ->
+                if (videoKeys.any { it in item.keys }) {
+                    return Match(RANK_MEDIA_KEY + index + penalty, item.link)
+                }
+            }
         }
 
         // 3) 보이는 영상이 바뀐 직후에 잡힌 것. 위 둘이 모두 안 될 때의 마지막 수단.
+        // 어느 글의 것인지는 가릴 수 없으므로 글 주소를 붙이지 않는다.
         if (focus > 0 && video.detectedAt in (focus - MATCH_BEFORE_MS)..(focus + MATCH_AFTER_MS)) {
-            return RANK_RECENT + subtitlePenalty(video.url)
+            return Match(RANK_RECENT + penalty, null)
         }
 
         return null
@@ -215,10 +225,7 @@ class DetectionStore {
         currentPage = pageUrl
         _videos.value = emptyList()
         _onScreenVideos.value = emptyList()
-        onScreenOrder = emptyList()
-        onScreenUrls.clear()
-        onScreenKeys.clear()
-        onScreenLink = null
+        itemIndex = emptyList()
         onScreenCount = 0
         focusChangedAt = 0L
         inspected.clear()

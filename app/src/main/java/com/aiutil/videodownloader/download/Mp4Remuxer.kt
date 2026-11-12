@@ -9,15 +9,19 @@ import java.io.File
 import java.nio.ByteBuffer
 
 /**
- * 이어 붙인 TS 스트림을 MP4로 다시 담는다. 재인코딩 없이 컨테이너만 바꾸므로 빠르고
- * 화질 손실이 없다.
+ * 이어 붙인 스트림을 일반 MP4로 다시 담는다. 재인코딩 없이 컨테이너만 바꾸므로
+ * 빠르고 화질 손실이 없다.
  *
- * TS 파일도 대부분의 재생기가 열 수 있지만 갤러리 앱이 인식하지 못하는 경우가 많아,
- * 가능하면 MP4로 바꿔 둔다. 실패하면 호출자가 원본을 그대로 쓰면 된다.
+ * 두 가지 입력을 모두 다룬다.
+ *  - TS: 갤러리 앱이 인식하지 못하는 경우가 많다.
+ *  - 조각난 MP4(fMP4): 조각을 이어 붙이면 확장자는 mp4지만 색인(moov)이 없어
+ *    갤러리와 기본 재생기가 열지 못한다. 겉보기엔 멀쩡한 MP4라 더 헷갈린다.
+ *
+ * 둘 다 여기서 색인이 있는 보통의 MP4로 바뀐다. 실패하면 호출자가 원본을 쓴다.
  */
-object TsRemuxer {
+object Mp4Remuxer {
 
-    private const val TAG = "TsRemuxer"
+    private const val TAG = "Mp4Remuxer"
 
     /** 조각 하나가 통째로 담길 만큼 넉넉히 잡는다. 작으면 읽다가 터진다. */
     private const val MIN_BUFFER = 2 shl 20
