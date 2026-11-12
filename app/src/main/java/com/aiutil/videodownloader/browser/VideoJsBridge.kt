@@ -96,6 +96,18 @@ class VideoJsBridge(
             return out;
           }
 
+          // 피드는 재생을 누르기 전까지 <video>를 만들지 않고 썸네일만 보여 준다.
+          // 그래서 썸네일 이미지도 '화면에 있는 영상'으로 센다. 썸네일 주소에는
+          // 스트림과 같은 미디어 번호가 들어 있어 짝짓는 데도 쓸 수 있다.
+          function thumbnailLike(src) {
+            if (!src) return false;
+            var s = src.toLowerCase();
+            if (s.indexOf('video_thumb') >= 0) return true;
+            if (s.indexOf('vid_thumb') >= 0) return true;
+            if (s.indexOf('poster') >= 0) return true;
+            return s.indexOf('thumb') >= 0 && s.indexOf('video') >= 0;
+          }
+
           // 요소가 뷰포트와 겹치는 비율.
           function visibleRatio(el) {
             var r = el.getBoundingClientRect();
@@ -139,6 +151,24 @@ class VideoJsBridge(
                   // 썸네일 주소에는 보통 스트림과 같은 미디어 번호가 들어 있다.
                   p: usable(v.poster) ? absolute(v.poster) : ''
                 });
+              }
+            }
+
+            // 아직 <video>가 만들어지지 않은 영상은 썸네일로 잡는다.
+            // 프로필 사진 같은 작은 이미지는 건너뛴다.
+            var images = document.querySelectorAll('img');
+            for (var t = 0; t < images.length; t++) {
+              var im = images[t];
+              if (im.naturalWidth < 150 || im.naturalHeight < 150) continue;
+
+              var isrc = im.currentSrc || im.getAttribute('src');
+              if (!thumbnailLike(isrc)) continue;
+
+              if (!im.__vdlId) { seq++; im.__vdlId = 'i' + seq; }
+              var iratio = visibleRatio(im);
+              if (iratio >= ${VISIBLE_RATIO}) {
+                visibleCount++;
+                items.push({ id: im.__vdlId, r: iratio, s: [], p: absolute(isrc) });
               }
             }
 
