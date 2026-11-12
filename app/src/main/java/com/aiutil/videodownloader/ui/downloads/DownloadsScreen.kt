@@ -10,15 +10,25 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -27,10 +37,14 @@ import com.aiutil.videodownloader.App
 import com.aiutil.videodownloader.model.DownloadItem
 import com.aiutil.videodownloader.model.DownloadStatus
 import com.aiutil.videodownloader.model.MediaKind
+import com.aiutil.videodownloader.util.Clip
 import com.aiutil.videodownloader.util.Format
 
 @Composable
-fun DownloadsScreen(modifier: Modifier = Modifier) {
+fun DownloadsScreen(
+    onOpenLink: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val all by App.store.items.collectAsStateWithLifecycle()
     val items = all.filter { it.status != DownloadStatus.COMPLETED }
 
@@ -48,21 +62,25 @@ fun DownloadsScreen(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items(items, key = { it.id }) { item ->
-            DownloadCard(item)
+            DownloadCard(item = item, onOpenLink = onOpenLink)
         }
     }
 }
 
 @Composable
-private fun DownloadCard(item: DownloadItem) {
+private fun DownloadCard(item: DownloadItem, onOpenLink: (String) -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                LinkMenu(item = item, onOpenLink = onOpenLink)
+            }
 
             Text(
                 text = statusLine(item),
@@ -118,6 +136,49 @@ private fun DownloadCard(item: DownloadItem) {
                     DownloadStatus.COMPLETED -> Unit
                 }
             }
+        }
+    }
+}
+
+/**
+ * 영상의 출처로 돌아가는 메뉴.
+ *
+ * 받다가 실패했을 때 "이게 어디서 온 영상이었지"를 찾느라 헤매지 않게 하기 위한 것이다.
+ */
+@Composable
+fun LinkMenu(item: DownloadItem, onOpenLink: (String) -> Unit) {
+    val context = LocalContext.current
+    var open by remember { mutableStateOf(false) }
+    val pageUrl = item.pageUrl?.takeIf { it.isNotBlank() }
+
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.Default.MoreVert, contentDescription = "링크 메뉴")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text("원본 페이지 열기") },
+                enabled = pageUrl != null,
+                onClick = {
+                    open = false
+                    pageUrl?.let(onOpenLink)
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("페이지 주소 복사") },
+                enabled = pageUrl != null,
+                onClick = {
+                    open = false
+                    pageUrl?.let { Clip.copy(context, it) }
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("영상 주소 복사") },
+                onClick = {
+                    open = false
+                    Clip.copy(context, item.url)
+                },
+            )
         }
     }
 }

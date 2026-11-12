@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiutil.videodownloader.App
@@ -48,6 +49,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 @Composable
 fun AppRoot(viewModel: BrowserViewModel, tabManager: TabManager) {
     var selected by rememberSaveable { mutableIntStateOf(0) }
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val items by App.store.items.collectAsStateWithLifecycle()
     val activeCount = items.count { it.status.isActive }
@@ -66,6 +68,15 @@ fun AppRoot(viewModel: BrowserViewModel, tabManager: TabManager) {
 
     // 키보드가 올라오면 하단 탭 바를 치운다. 좁은 화면에서 입력란까지 가리는 것을 막는다.
     val keyboardVisible = WindowInsets.isImeVisible
+
+    /**
+     * 다운로드 항목의 출처로 이동한다. 새 탭에서 열어 보고 있던 페이지를 덮지 않는다.
+     * 탭이 가득 찼으면 현재 탭에서 연다.
+     */
+    val openLink: (String) -> Unit = { url ->
+        if (tabManager.openTab(context, url) == null) viewModel.open(url)
+        selected = Tab.BROWSER.ordinal
+    }
 
     Scaffold(
         modifier = Modifier.imePadding(),
@@ -100,8 +111,16 @@ fun AppRoot(viewModel: BrowserViewModel, tabManager: TabManager) {
         ) {
             when (Tab.entries[selected]) {
                 Tab.BROWSER -> BrowserScreen(viewModel, tabManager, Modifier.fillMaxSize())
-                Tab.DOWNLOADS -> DownloadsScreen(Modifier.fillMaxSize())
-                Tab.LIBRARY -> LibraryScreen(Modifier.fillMaxSize())
+
+                Tab.DOWNLOADS -> DownloadsScreen(
+                    onOpenLink = openLink,
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                Tab.LIBRARY -> LibraryScreen(
+                    onOpenLink = openLink,
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
         }
     }

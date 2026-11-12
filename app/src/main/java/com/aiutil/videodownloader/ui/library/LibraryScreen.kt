@@ -42,12 +42,16 @@ import com.aiutil.videodownloader.model.DownloadItem
 import com.aiutil.videodownloader.model.DownloadStatus
 import com.aiutil.videodownloader.ui.components.VideoThumbnail
 import com.aiutil.videodownloader.ui.downloads.EmptyMessage
+import com.aiutil.videodownloader.util.Clip
 import com.aiutil.videodownloader.util.Format
 import com.aiutil.videodownloader.util.MediaIntents
 import com.aiutil.videodownloader.util.Names
 
 @Composable
-fun LibraryScreen(modifier: Modifier = Modifier) {
+fun LibraryScreen(
+    onOpenLink: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val all by App.store.items.collectAsStateWithLifecycle()
     val completed = all
         .filter { it.status == DownloadStatus.COMPLETED }
@@ -66,7 +70,11 @@ fun LibraryScreen(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items(completed, key = { it.id }) { item ->
-            LibraryRow(item = item, onDeleteRequest = { pendingDelete = item })
+            LibraryRow(
+                item = item,
+                onOpenLink = onOpenLink,
+                onDeleteRequest = { pendingDelete = item },
+            )
         }
     }
 
@@ -89,10 +97,15 @@ fun LibraryScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun LibraryRow(item: DownloadItem, onDeleteRequest: () -> Unit) {
+private fun LibraryRow(
+    item: DownloadItem,
+    onOpenLink: (String) -> Unit,
+    onDeleteRequest: () -> Unit,
+) {
     val context = LocalContext.current
     var menuOpen by remember { mutableStateOf(false) }
     val mimeType = Names.mimeForExtension(Names.extensionOf(item.fileName))
+    val pageUrl = item.pageUrl?.takeIf { it.isNotBlank() }
 
     Card(
         modifier = Modifier
@@ -139,6 +152,21 @@ private fun LibraryRow(item: DownloadItem, onDeleteRequest: () -> Unit) {
                         onClick = {
                             menuOpen = false
                             MediaIntents.share(context, item.outputUri, mimeType)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("원본 페이지 열기") },
+                        enabled = pageUrl != null,
+                        onClick = {
+                            menuOpen = false
+                            pageUrl?.let(onOpenLink)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("영상 주소 복사") },
+                        onClick = {
+                            menuOpen = false
+                            Clip.copy(context, item.url)
                         },
                     )
                     DropdownMenuItem(
