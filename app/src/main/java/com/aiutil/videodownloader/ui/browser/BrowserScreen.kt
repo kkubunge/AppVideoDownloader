@@ -120,6 +120,11 @@ fun BrowserScreen(
         viewModel.syncAddress(activeTab?.url.orEmpty())
     }
 
+    // 되살린 탭은 실제로 볼 때 비로소 불러온다.
+    LaunchedEffect(activeTab?.id) {
+        activeTab?.loadPendingIfNeeded()
+    }
+
     LaunchedEffect(viewModel.pendingLoad, activeTab?.id) {
         val target = viewModel.pendingLoad ?: return@LaunchedEffect
         val tab = tabManager.activeTab ?: return@LaunchedEffect

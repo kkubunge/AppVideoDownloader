@@ -5,6 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.aiutil.videodownloader.App
+import com.aiutil.videodownloader.data.TabStateStore
 import com.aiutil.videodownloader.model.DetectedVideo
 import java.util.UUID
 
@@ -27,9 +29,42 @@ class TabManager(private val onDownloadRequested: (DetectedVideo) -> Unit) {
 
     val count: Int get() = _tabs.size
 
-    /** 탭이 하나도 없으면 빈 탭을 하나 만들어 활성화한다. 앱 시작 시 호출. */
-    fun ensureInitialTab(context: Context) {
-        if (_tabs.isEmpty()) openTab(context)
+    /**
+     * 지난번에 열어 두었던 탭을 되살린다. 없으면 빈 탭을 하나 만든다.
+     *
+     * 주소만 복원하고 실제로 불러오지는 않는다. 그 탭을 볼 때 비로소 불러온다.
+     */
+    fun restore(context: Context) {
+        if (_tabs.isNotEmpty()) return
+
+        val saved = App.tabs.load()
+        saved.tabs.take(MAX_TABS).forEach { snapshot ->
+            _tabs.add(
+                BrowserTab(
+                    id = snapshot.id,
+                    context = context,
+                    restoredUrl = snapshot.url,
+                    restoredTitle = snapshot.title,
+                    onDownloadRequested = onDownloadRequested,
+                    onStateChanged = ::persist,
+                )
+            )
+        }
+
+        if (_tabs.isEmpty()) {
+            openTab(context)
+            return
+        }
+        activeTabId = saved.activeTabId?.takeIf { id -> _tabs.any { it.id == id } } ?: _tabs.first().id
+    }
+
+    private fun persist() {
+        App.tabs.save(
+            TabStateStore.TabsState(
+                tabs = _tabs.map { TabStateStore.TabSnapshot(it.id, it.url, it.title) },
+                activeTabId = activeTabId,
+            )
+        )
     }
 
     /**
@@ -43,10 +78,12 @@ class TabManager(private val onDownloadRequested: (DetectedVideo) -> Unit) {
             id = UUID.randomUUID().toString(),
             context = context,
             onDownloadRequested = onDownloadRequested,
+            onStateChanged = ::persist,
         )
         _tabs.add(tab)
         select(tab.id)
         if (!url.isNullOrBlank()) tab.loadUrl(url)
+        persist()
         return tab
     }
 
@@ -55,6 +92,7 @@ class TabManager(private val onDownloadRequested: (DetectedVideo) -> Unit) {
         // 이전 탭의 WebView를 화면에서 떼어내야 새 탭을 붙일 수 있다.
         activeTab?.detachFromParent()
         activeTabId = id
+        persist()
     }
 
     /** 탭을 닫는다. 마지막 하나를 닫으면 빈 탭을 새로 만들어 둔다. */
@@ -75,6 +113,7 @@ class TabManager(private val onDownloadRequested: (DetectedVideo) -> Unit) {
             val next = _tabs.getOrNull(index) ?: _tabs.last()
             activeTabId = next.id
         }
+        persist()
     }
 
     fun closeAll(context: Context) {
@@ -84,6 +123,11 @@ class TabManager(private val onDownloadRequested: (DetectedVideo) -> Unit) {
         openTab(context)
     }
 
+    /**
+     * 화면이 사라질 때 WebView만 정리한다.
+     *
+     * 저장된 탭 목록은 건드리지 않는다. 여기서 비우면 다음에 켤 때 되살릴 것이 없어진다.
+     */
     fun destroyAll() {
         _tabs.forEach { it.destroy() }
         _tabs.clear()

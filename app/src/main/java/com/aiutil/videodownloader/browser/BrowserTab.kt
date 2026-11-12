@@ -28,7 +28,10 @@ import kotlinx.coroutines.cancel
 class BrowserTab(
     val id: String,
     context: Context,
+    restoredUrl: String? = null,
+    restoredTitle: String? = null,
     private val onDownloadRequested: (DetectedVideo) -> Unit,
+    private val onStateChanged: () -> Unit = {},
 ) {
 
     /** 탭마다 따로 둔다 — 다른 탭에서 찾은 영상이 섞이면 안 된다. */
@@ -40,10 +43,18 @@ class BrowserTab(
      */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    var title by mutableStateOf("")
+    var title by mutableStateOf(restoredTitle.orEmpty())
         private set
-    var url by mutableStateOf("")
+    var url by mutableStateOf(restoredUrl.orEmpty())
         private set
+
+    /**
+     * 복원된 탭이 아직 불러오지 않은 주소.
+     *
+     * 앱을 켤 때 열려 있던 탭을 전부 한꺼번에 불러오면 느리고 데이터도 많이 쓴다.
+     * 그 탭을 실제로 볼 때 비로소 불러온다.
+     */
+    private var pendingUrl: String? = restoredUrl?.takeIf { it.isNotBlank() }
     var isLoading by mutableStateOf(false)
         private set
     var canGoBack by mutableStateOf(false)
@@ -65,6 +76,7 @@ class BrowserTab(
             onNavigate = { navigatedUrl, back ->
                 url = navigatedUrl
                 canGoBack = back
+                onStateChanged()
             },
             onLoadingChanged = { loading ->
                 isLoading = loading
@@ -114,6 +126,7 @@ class BrowserTab(
                 override fun onReceivedTitle(view: WebView?, received: String?) {
                     snifferClient.currentTitle = received.orEmpty()
                     this@BrowserTab.title = received.orEmpty()
+                    onStateChanged()
                 }
 
                 override fun onProgressChanged(view: WebView?, newProgress: Int) {
@@ -154,7 +167,16 @@ class BrowserTab(
         }
 
     fun loadUrl(target: String) {
+        pendingUrl = null
         url = target
+        webView.loadUrl(target)
+        onStateChanged()
+    }
+
+    /** 복원된 탭을 처음 볼 때 호출한다. 불러올 것이 없으면 아무 일도 하지 않는다. */
+    fun loadPendingIfNeeded() {
+        val target = pendingUrl ?: return
+        pendingUrl = null
         webView.loadUrl(target)
     }
 

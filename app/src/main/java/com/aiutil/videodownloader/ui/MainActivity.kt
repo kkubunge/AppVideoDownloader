@@ -36,8 +36,8 @@ class MainActivity : ComponentActivity() {
         // 키보드 인셋을 Compose가 직접 다루게 한다. 매니페스트의 adjustResize와 짝이다.
         enableEdgeToEdge()
 
-        // 탭을 먼저 만들어 두면 공유로 들어온 주소를 첫 화면에서 바로 열 수 있다.
-        tabManager.ensureInitialTab(this)
+        // 지난번에 열어 두었던 탭을 되살린다. 없으면 빈 탭 하나로 시작한다.
+        tabManager.restore(this)
 
         askNotificationPermissionIfNeeded()
         handleIncoming(intent)

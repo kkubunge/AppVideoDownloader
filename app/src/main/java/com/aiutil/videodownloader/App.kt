@@ -4,6 +4,7 @@ import android.app.Application
 import com.aiutil.videodownloader.data.BookmarkStore
 import com.aiutil.videodownloader.data.DownloadHistoryStore
 import com.aiutil.videodownloader.data.DownloadStore
+import com.aiutil.videodownloader.data.TabStateStore
 import com.aiutil.videodownloader.download.DownloadManagerCore
 import com.aiutil.videodownloader.download.Notifications
 
@@ -15,6 +16,7 @@ class App : Application() {
         store = DownloadStore(this)
         history = DownloadHistoryStore(this)
         bookmarks = BookmarkStore(this)
+        tabs = TabStateStore(this)
         downloads = DownloadManagerCore(this, store, history)
         Notifications.createChannels(this)
 
@@ -33,6 +35,9 @@ class App : Application() {
             private set
 
         lateinit var bookmarks: BookmarkStore
+            private set
+
+        lateinit var tabs: TabStateStore
             private set
 
         lateinit var downloads: DownloadManagerCore
