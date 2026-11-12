@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
 
@@ -27,6 +28,12 @@ class DownloadStore(context: Context) {
 
     private val file = File(context.filesDir, "downloads.json")
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+    /**
+     * 직렬화기를 명시한다. reified 확장(`encodeToString(value)`)은 import 여부에 따라
+     * serializer를 요구하는 멤버 함수로 해석돼 컴파일이 깨진다.
+     */
+    private val itemsSerializer = ListSerializer(DownloadItem.serializer())
     private val mutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -97,7 +104,7 @@ class DownloadStore(context: Context) {
     }
 
     private fun readFromDisk(): List<DownloadItem> = try {
-        if (file.exists()) json.decodeFromString<List<DownloadItem>>(file.readText()) else emptyList()
+        if (file.exists()) json.decodeFromString(itemsSerializer, file.readText()) else emptyList()
     } catch (t: Throwable) {
         Log.w(TAG, "다운로드 목록을 읽지 못해 비우고 시작한다", t)
         emptyList()
@@ -107,7 +114,7 @@ class DownloadStore(context: Context) {
         dirty = false
         try {
             val tmp = File(file.parentFile, file.name + ".tmp")
-            tmp.writeText(json.encodeToString(_items.value))
+            tmp.writeText(json.encodeToString(itemsSerializer, _items.value))
             if (!tmp.renameTo(file)) {
                 file.writeText(tmp.readText())
                 tmp.delete()
