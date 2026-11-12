@@ -62,7 +62,7 @@ object HlsDownloader {
                 Resolved.Variants(variants, duration)
             } else {
                 val playlist = M3u8Parser.parseMedia(document.text, document.baseUrl)
-                rejectIfSubtitles(playlist)
+                rejectIfNotVideo(url, playlist)
                 Resolved.Media(url, playlist, estimateFromFirstSegment(playlist, headers))
             }
         }
@@ -78,11 +78,13 @@ object HlsDownloader {
             ?.url?.substringBefore('?')?.substringAfterLast('.', "")?.lowercase()
             .orEmpty()
 
-    private fun rejectIfSubtitles(playlist: M3u8Parser.MediaPlaylist) {
+    private fun rejectIfNotVideo(url: String, playlist: M3u8Parser.MediaPlaylist) {
         if (playlist.segments.isEmpty()) return
-        val extension = segmentExtension(playlist)
-        if (extension in SUBTITLE_EXTENSIONS) {
+        if (segmentExtension(playlist) in SUBTITLE_EXTENSIONS) {
             throw IOException(SUBTITLE_MESSAGE)
+        }
+        if (looksAudioOnly(url)) {
+            throw IOException(AUDIO_ONLY_MESSAGE)
         }
     }
 
@@ -90,15 +92,25 @@ object HlsDownloader {
 
     private val SUBTITLE_URL_HINTS = listOf("/sub/", "/subs/", "subtitle", "caption", ".vtt")
 
+    /** 소리만 담긴 트랙. HLS 마스터는 영상과 오디오를 따로 담는 일이 흔하다. */
+    private val AUDIO_URL_HINTS = listOf("/mp4a/", "/audio/", "/aac/", "audio-only")
+
+    const val AUDIO_ONLY_MESSAGE = "소리만 있는 주소입니다. 같은 영상의 영상 주소를 골라 주세요"
+
+    fun looksAudioOnly(url: String): Boolean {
+        val lower = url.lowercase()
+        return AUDIO_URL_HINTS.any { it in lower }
+    }
+
     /**
-     * 주소 모양만 보고 자막일 가능성을 가늠한다.
+     * 주소 모양만 보고 영상이 아닐 가능성을 가늠한다(자막·오디오 전용).
      *
      * 확실하지 않다 — 사이트마다 경로가 다르다. 그래서 거르는 데는 쓰지 않고,
      * 어느 것부터 시도할지 순서를 정하는 데만 쓴다.
      */
-    fun looksLikeSubtitles(url: String): Boolean {
+    fun looksLikeNonVideo(url: String): Boolean {
         val lower = url.lowercase()
-        return SUBTITLE_URL_HINTS.any { it in lower }
+        return SUBTITLE_URL_HINTS.any { it in lower } || AUDIO_URL_HINTS.any { it in lower }
     }
 
     /** 이 문구를 보면 화면이 감지 목록을 열어 준다. 영상 주소를 바로 고를 수 있게. */
@@ -163,7 +175,7 @@ object HlsDownloader {
         }
 
         val playlist = M3u8Parser.parseMedia(media.text, media.baseUrl)
-        rejectIfSubtitles(playlist)
+        rejectIfNotVideo(playlistUrl, playlist)
 
         DebugLog.log(
             "HLS",

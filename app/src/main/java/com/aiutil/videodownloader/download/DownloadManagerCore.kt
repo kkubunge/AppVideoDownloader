@@ -333,26 +333,43 @@ class DownloadManagerCore(
             file.delete()
             throw IOException("받은 내용이 영상이 아닙니다 (${size}바이트)")
         }
-        if (!isPlayable(file)) {
-            file.delete()
-            throw IOException("받은 파일을 재생할 수 없습니다. 영상 주소가 아닐 수 있습니다")
+        when (inspect(file)) {
+            Content.UNREADABLE -> {
+                file.delete()
+                throw IOException("받은 파일을 재생할 수 없습니다. 영상 주소가 아닐 수 있습니다")
+            }
+
+            // 주소 모양으로 거르지 못한 오디오 전용 트랙은 여기서 걸린다.
+            // 소리만 든 파일을 영상이라고 보관함에 넣으면 안 된다.
+            Content.AUDIO_ONLY -> {
+                file.delete()
+                throw IOException(HlsDownloader.AUDIO_ONLY_MESSAGE)
+            }
+
+            Content.VIDEO -> DebugLog.log("검증", "통과 · 영상 트랙 있음 · ${file.length()}바이트")
         }
-        DebugLog.log("검증", "통과 · ${file.length()}바이트")
     }
 
-    private fun isPlayable(file: File): Boolean {
+    private enum class Content { VIDEO, AUDIO_ONLY, UNREADABLE }
+
+    private fun inspect(file: File): Content {
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(file.absolutePath)
+            val hasVideo =
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) == "yes"
             val duration = retriever
                 .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull() ?: 0L
-            val hasVideo =
-                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) == "yes"
-            duration > 0L || hasVideo
+
+            when {
+                hasVideo -> Content.VIDEO
+                duration > 0L -> Content.AUDIO_ONLY
+                else -> Content.UNREADABLE
+            }
         } catch (t: Throwable) {
             Log.w(TAG, "받은 파일을 읽지 못했다: ${file.name}", t)
-            false
+            Content.UNREADABLE
         } finally {
             runCatching { retriever.release() }
         }

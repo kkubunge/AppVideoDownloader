@@ -175,7 +175,7 @@ class BrowserViewModel : ViewModel() {
                         // 자막처럼 보이는 주소는 뒤로 민다. 안정 정렬이라 나머지 순서는
                         // 그대로 남는다. 이걸 안 하면 자막을 먼저 시도하느라 시도 횟수를
                         // 다 써 버리고, 사용자는 될 때까지 버튼을 여러 번 눌러야 한다.
-                        .sortedBy { if (HlsDownloader.looksLikeSubtitles(it.url)) 1 else 0 }
+                        .sortedBy { if (HlsDownloader.looksLikeNonVideo(it.url)) 1 else 0 }
                         .take(MAX_RESOLVE_ATTEMPTS)
 
                     var lastReason: String? = null
@@ -201,8 +201,11 @@ class BrowserViewModel : ViewModel() {
         }
     }
 
+    /** 영상이 아닌 주소를 골랐을 뿐이라면 다른 후보를 시도할 값어치가 있다. */
     private fun worthTryingNext(reason: String): Boolean =
-        reason == HlsDownloader.SUBTITLE_MESSAGE || reason.contains("플레이리스트가 아닌")
+        reason == HlsDownloader.SUBTITLE_MESSAGE ||
+            reason == HlsDownloader.AUDIO_ONLY_MESSAGE ||
+            reason.contains("플레이리스트가 아닌")
 
     private suspend fun buildHlsPlan(video: DetectedVideo): DownloadPlan {
         val fileName = Names.buildFileName(video.displayName, video.url, MediaKind.HLS)

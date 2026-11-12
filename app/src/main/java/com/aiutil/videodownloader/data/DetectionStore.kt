@@ -215,7 +215,7 @@ class DetectionStore {
      * 같아지고, 보통 나중에 불리는 자막이 이겨 버린다.
      */
     private fun subtitlePenalty(url: String): Int =
-        if (HlsDownloader.looksLikeSubtitles(url)) RANK_SUBTITLE_PENALTY else 0
+        if (HlsDownloader.looksLikeNonVideo(url)) RANK_SUBTITLE_PENALTY else 0
 
     /** 주소에 박힌 긴 숫자(미디어 번호)를 뽑는다. */
     private fun mediaKeys(url: String): Set<String> =
