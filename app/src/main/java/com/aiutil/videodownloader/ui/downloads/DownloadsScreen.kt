@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -19,6 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -56,13 +58,84 @@ fun DownloadsScreen(
         return
     }
 
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        items(items, key = { it.id }) { item ->
-            DownloadCard(item = item, onOpenLink = onOpenLink)
+    Column(modifier.fillMaxSize()) {
+        BulkActionBar(items)
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(items, key = { it.id }) { item ->
+                DownloadCard(item = item, onOpenLink = onOpenLink)
+            }
+        }
+    }
+}
+
+/**
+ * 목록 전체를 한 번에 다루는 막대.
+ *
+ * 받다가 자리를 옮기거나 데이터를 아껴야 할 때 항목마다 눌러 멈추는 것은 번거롭다.
+ */
+@Composable
+private fun BulkActionBar(items: List<DownloadItem>) {
+    val active = items.count { it.status.isActive }
+    val paused = items.count { it.status == DownloadStatus.PAUSED }
+    val failed = items.count {
+        it.status == DownloadStatus.FAILED || it.status == DownloadStatus.CANCELED
+    }
+    var menuOpen by remember { mutableStateOf(false) }
+
+    Surface(tonalElevation = 2.dp) {
+        Column(Modifier.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 4.dp)) {
+            Text(
+                text = buildList {
+                    if (active > 0) add("진행 중 $active")
+                    if (paused > 0) add("일시정지 $paused")
+                    if (failed > 0) add("실패 $failed")
+                }.joinToString(" · ").ifEmpty { "대기 중인 항목 없음" },
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(
+                    onClick = { App.downloads.pauseAll() },
+                    enabled = active > 0,
+                ) { Text("모두 일시정지") }
+
+                TextButton(
+                    onClick = { App.downloads.resumeAll() },
+                    enabled = paused > 0,
+                ) { Text("모두 이어받기") }
+
+                Spacer(Modifier.weight(1f))
+
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "일괄 작업")
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("실패한 항목 다시 시도") },
+                            enabled = failed > 0,
+                            onClick = {
+                                menuOpen = false
+                                App.downloads.retryAllFailed()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("실패·취소 항목 지우기") },
+                            enabled = failed > 0,
+                            onClick = {
+                                menuOpen = false
+                                App.downloads.clearFailed()
+                            },
+                        )
+                    }
+                }
+            }
         }
     }
 }

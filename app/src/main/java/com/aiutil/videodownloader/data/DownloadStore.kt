@@ -49,6 +49,14 @@ class DownloadStore(context: Context) : JsonListStore<DownloadItem>(
         persist()
     }
 
+    /** 여러 항목을 한 번에 지운다. 하나씩 지우면 그만큼 디스크에 쓰게 된다. */
+    fun removeWhere(predicate: (DownloadItem) -> Boolean) {
+        val remaining = snapshot.filterNot(predicate)
+        if (remaining.size == snapshot.size) return
+        snapshot = remaining
+        persist()
+    }
+
     /**
      * 프로세스가 비정상 종료되면 RUNNING 상태가 그대로 남는다. 시작 시 한 번 PAUSED로
      * 내려 두어야 UI에 "진행 중인데 아무 일도 안 일어나는" 항목이 남지 않는다.

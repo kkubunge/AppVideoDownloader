@@ -121,6 +121,28 @@ class DownloadManagerCore(
         store.items.value.filter { it.status.isActive }.forEach { pause(it.id) }
     }
 
+    /** 멈춰 둔 것을 한꺼번에 다시 시작한다. 동시 실행 수는 [MAX_CONCURRENT]가 조절한다. */
+    fun resumeAll() {
+        store.items.value
+            .filter { it.status == DownloadStatus.PAUSED }
+            .forEach { resume(it.id) }
+    }
+
+    fun retryAllFailed() {
+        store.items.value
+            .filter { it.status == DownloadStatus.FAILED || it.status == DownloadStatus.CANCELED }
+            .forEach { retry(it.id) }
+    }
+
+    /** 실패·취소로 끝난 항목을 목록에서 치운다. 저장된 영상 파일은 건드리지 않는다. */
+    fun clearFailed() {
+        val isFailure = { item: DownloadItem ->
+            item.status == DownloadStatus.FAILED || item.status == DownloadStatus.CANCELED
+        }
+        store.items.value.filter(isFailure).forEach { partFile(it.id).delete() }
+        store.removeWhere(isFailure)
+    }
+
     private fun startJob(id: String) {
         if (jobs[id]?.isActive == true) return
         val item = store.get(id) ?: return
