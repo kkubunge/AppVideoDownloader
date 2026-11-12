@@ -117,6 +117,20 @@ class DownloadManagerCore(
         store.remove(id)
     }
 
+    /**
+     * 보관함의 항목을 같은 주소로 다시 받는다.
+     *
+     * 스트림 주소에는 보통 유효 기간이 있어서 시간이 지났으면 실패한다.
+     * 그때는 '원본 페이지 열기'로 다시 찾아야 한다.
+     */
+    fun redownload(item: DownloadItem): String = enqueue(
+        url = item.url,
+        title = item.title,
+        kind = item.kind,
+        headers = item.headers,
+        pageUrl = item.pageUrl,
+    )
+
     /** 여러 항목을 한 번에 지운다. 보관함의 선택 삭제가 쓴다. */
     fun removeAll(ids: Collection<String>, deleteFile: Boolean) {
         if (ids.isEmpty()) return

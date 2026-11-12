@@ -76,11 +76,14 @@ object HlsDownloader {
         val first = playlist.segments.firstOrNull() ?: return
         val extension = first.url.substringBefore('?').substringAfterLast('.', "").lowercase()
         if (extension in SUBTITLE_EXTENSIONS) {
-            throw IOException("자막 트랙입니다. 영상 주소를 골라 주세요")
+            throw IOException(SUBTITLE_MESSAGE)
         }
     }
 
     private val SUBTITLE_EXTENSIONS = setOf("vtt", "webvtt", "srt", "ttml")
+
+    /** 이 문구를 보면 화면이 감지 목록을 열어 준다. 영상 주소를 바로 고를 수 있게. */
+    const val SUBTITLE_MESSAGE = "이 주소는 자막 트랙입니다. 같은 영상의 영상 주소를 골라 주세요"
 
     /**
      * 화질별 예상 용량. 비트레이트 × 재생시간 ÷ 8.

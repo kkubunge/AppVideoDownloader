@@ -266,6 +266,13 @@ private fun LibraryRow(
                             },
                         )
                         DropdownMenuItem(
+                            text = { Text("다시 받기") },
+                            onClick = {
+                                menuOpen = false
+                                App.downloads.redownload(item)
+                            },
+                        )
+                        DropdownMenuItem(
                             text = { Text("원본 페이지 열기") },
                             enabled = pageUrl != null,
                             onClick = {

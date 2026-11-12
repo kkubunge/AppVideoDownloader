@@ -49,6 +49,14 @@ class DetectionStore {
     private var focusChangedAt = 0L
 
     /**
+     * 지금 보고 있는 영상이 실린 글의 고유 주소.
+     *
+     * 피드에서는 주소창이 늘 피드 주소다. 그걸 그대로 쓰면 '원본 페이지 열기'가
+     * 피드로 가고, 전에 받은 영상인지 가려낼 때도 피드의 모든 영상이 하나로 묶인다.
+     */
+    private var onScreenLink: String? = null
+
+    /**
      * 이미 검토한 주소. HEAD 요청을 중복으로 날리지 않기 위한 기록이며,
      * 오래된 것부터 버리는 LRU다.
      */
@@ -107,7 +115,14 @@ class DetectionStore {
      * @param changed 직전 보고와 견줘 보이는 영상이 바뀌었는지
      */
     @Synchronized
-    fun setOnScreen(urls: List<String>, posters: List<String>, count: Int, changed: Boolean) {
+    fun setOnScreen(
+        urls: List<String>,
+        posters: List<String>,
+        link: String?,
+        count: Int,
+        changed: Boolean,
+    ) {
+        onScreenLink = link
         onScreenOrder = urls.map { normalize(it) }
         onScreenUrls.clear()
         onScreenUrls.addAll(onScreenOrder)
@@ -147,10 +162,14 @@ class DetectionStore {
             .mapNotNull { video -> rankOf(video, focus)?.let { video to it } }
 
         // 확실한 짝(주소 → 미디어 번호 → 시점) 순으로, 같은 등급 안에서는 최근 것부터.
+        val link = onScreenLink
         _onScreenVideos.value = ranked
             .sortedWith(compareBy<Pair<DetectedVideo, Int>> { it.second }
                 .thenByDescending { it.first.detectedAt })
-            .map { it.first }
+            .map { (video, _) ->
+                // 피드 주소 대신 그 영상이 실린 글의 주소를 달아 준다.
+                if (link.isNullOrBlank()) video else video.copy(pageUrl = link)
+            }
     }
 
     /**
@@ -189,6 +208,7 @@ class DetectionStore {
         onScreenOrder = emptyList()
         onScreenUrls.clear()
         onScreenKeys.clear()
+        onScreenLink = null
         onScreenCount = 0
         focusChangedAt = 0L
         inspected.clear()

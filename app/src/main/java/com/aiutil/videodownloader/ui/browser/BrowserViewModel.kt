@@ -188,7 +188,10 @@ class BrowserViewModel : ViewModel() {
                         )
                     }
                 } catch (t: Throwable) {
-                    toast = "스트림 정보를 읽지 못했습니다: ${t.message ?: "알 수 없는 오류"}"
+                    val reason = t.message ?: "알 수 없는 오류"
+                    toast = reason
+                    // 자막을 고른 경우라면 목록을 열어 영상 주소를 바로 고르게 한다.
+                    if (reason == HlsDownloader.SUBTITLE_MESSAGE) sheet = Sheet.DETECTED
                 } finally {
                     resolving = false
                 }

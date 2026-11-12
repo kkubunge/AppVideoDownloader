@@ -481,7 +481,15 @@ private fun StartPage(onOpen: (String) -> Unit, modifier: Modifier = Modifier) {
                 text = "DRM으로 보호된 영상과 YouTube는 지원하지 않습니다.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp, bottom = 20.dp),
+                modifier = Modifier.padding(top = 6.dp),
+            )
+
+            // 어느 빌드를 쓰고 있는지 화면만 봐도 알 수 있게 한다.
+            Text(
+                text = "빌드 ${BuildConfig.BUILD_ID}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 20.dp),
             )
 
             LazyVerticalGrid(

@@ -36,6 +36,7 @@ class VideoJsBridge(
             detections.setOnScreen(
                 urls = toList(json.optJSONArray("visible")),
                 posters = toList(json.optJSONArray("posters")),
+                link = json.optString("link").takeIf { it.isNotBlank() },
                 count = json.optInt("visibleCount", 0),
                 changed = json.optBoolean("changed", false),
             )
@@ -108,6 +109,31 @@ class VideoJsBridge(
             return s.indexOf('thumb') >= 0 && s.indexOf('video') >= 0;
           }
 
+          /**
+           * 이 영상이 속한 글의 고유 주소를 찾는다.
+           *
+           * 피드에서는 주소창이 늘 피드 주소라, 그걸 저장하면 나중에 '원본 페이지
+           * 열기'가 피드로 가 버리고 같은 영상인지 가려내지도 못한다.
+           */
+          function nearestLink(el) {
+            var node = el;
+            for (var depth = 0; node && depth < 8; depth++) {
+              if (node.tagName === 'A') {
+                var own = node.getAttribute('href');
+                if (own && own.indexOf('#') !== 0) return absolute(own);
+              }
+              if (node.querySelectorAll) {
+                var links = node.querySelectorAll('a[href*="/status/"], a[href*="/p/"], a[href*="/watch"]');
+                if (links.length === 1) {
+                  var h = links[0].getAttribute('href');
+                  if (h && h.indexOf('#') !== 0) return absolute(h);
+                }
+              }
+              node = node.parentElement;
+            }
+            return '';
+          }
+
           // 요소가 뷰포트와 겹치는 비율.
           function visibleRatio(el) {
             var r = el.getBoundingClientRect();
@@ -149,7 +175,8 @@ class VideoJsBridge(
                   r: ratio,
                   s: srcs,
                   // 썸네일 주소에는 보통 스트림과 같은 미디어 번호가 들어 있다.
-                  p: usable(v.poster) ? absolute(v.poster) : ''
+                  p: usable(v.poster) ? absolute(v.poster) : '',
+                  l: nearestLink(v)
                 });
               }
             }
@@ -168,7 +195,13 @@ class VideoJsBridge(
               var iratio = visibleRatio(im);
               if (iratio >= ${VISIBLE_RATIO}) {
                 visibleCount++;
-                items.push({ id: im.__vdlId, r: iratio, s: [], p: absolute(isrc) });
+                items.push({
+                  id: im.__vdlId,
+                  r: iratio,
+                  s: [],
+                  p: absolute(isrc),
+                  l: nearestLink(im)
+                });
               }
             }
 
@@ -178,6 +211,8 @@ class VideoJsBridge(
             var visible = [];
             var posters = [];
             var key = '';
+            // 가장 많이 보이는 것의 글 주소를 대표로 쓴다.
+            var link = items.length > 0 ? items[0].l : '';
             for (var n = 0; n < items.length; n++) {
               for (var m = 0; m < items[n].s.length; m++) visible.push(items[n].s[m]);
               if (items[n].p) posters.push(items[n].p);
@@ -209,6 +244,7 @@ class VideoJsBridge(
               all: all,
               visible: visible,
               posters: posters,
+              link: link,
               visibleCount: visibleCount,
               changed: changed
             }));
