@@ -11,13 +11,14 @@ import com.aiutil.videodownloader.data.DetectionStore
 import kotlinx.coroutines.CoroutineScope
 
 /**
- * 페이지가 내보내는 모든 요청을 지켜보는 WebViewClient.
+ * 한 탭의 모든 요청을 지켜보는 WebViewClient.
  *
  * [shouldInterceptRequest]는 UI 스레드가 아닌 곳에서 불린다. 그래서 현재 페이지 정보를
  * WebView에서 직접 읽지 않고 [currentUrl]/[currentTitle]에 복사해 둔 값을 쓴다.
  */
 class SnifferWebViewClient(
     private val scope: CoroutineScope,
+    private val detections: DetectionStore,
     private val onNavigate: (url: String, canGoBack: Boolean) -> Unit,
     private val onLoadingChanged: (Boolean) -> Unit,
 ) : WebViewClient() {
@@ -46,7 +47,7 @@ class SnifferWebViewClient(
         super.onPageStarted(view, url, favicon)
         currentUrl = url
         currentTitle = view.title.orEmpty()
-        DetectionStore.onPageChanged(url)
+        detections.onPageChanged(url)
         onLoadingChanged(true)
         onNavigate(url, view.canGoBack())
     }
@@ -64,7 +65,7 @@ class SnifferWebViewClient(
         super.doUpdateVisitedHistory(view, url, isReload)
         // SPA는 페이지 전환을 해도 onPageStarted가 오지 않는다. 여기서 보강한다.
         currentUrl = url
-        DetectionStore.onPageChanged(url)
+        detections.onPageChanged(url)
         onNavigate(url, view.canGoBack())
     }
 
@@ -85,7 +86,7 @@ class SnifferWebViewClient(
                 request.requestHeaders?.forEach { (k, v) -> if (!k.equals("Range", true)) put(k, v) }
                 putAll(downloadHeaders(url))
             }
-            VideoSniffer.offer(scope, url, headers, currentUrl, currentTitle)
+            VideoSniffer.offer(scope, detections, url, headers, currentUrl, currentTitle)
         }
         // 응답은 건드리지 않는다. 관찰만 한다.
         return null

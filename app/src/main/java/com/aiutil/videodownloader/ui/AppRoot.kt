@@ -28,9 +28,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiutil.videodownloader.App
+import com.aiutil.videodownloader.browser.TabManager
 import com.aiutil.videodownloader.ui.browser.BrowserScreen
 import com.aiutil.videodownloader.ui.browser.BrowserViewModel
-import com.aiutil.videodownloader.ui.browser.WebViewHolder
 import com.aiutil.videodownloader.ui.downloads.DownloadsScreen
 import com.aiutil.videodownloader.ui.library.LibraryScreen
 
@@ -42,7 +42,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppRoot(viewModel: BrowserViewModel, holder: WebViewHolder) {
+fun AppRoot(viewModel: BrowserViewModel, tabManager: TabManager) {
     var selected by rememberSaveable { mutableIntStateOf(0) }
     val snackbarHostState = remember { SnackbarHostState() }
     val items by App.store.items.collectAsStateWithLifecycle()
@@ -89,7 +89,7 @@ fun AppRoot(viewModel: BrowserViewModel, holder: WebViewHolder) {
                 .padding(innerPadding)
         ) {
             when (Tab.entries[selected]) {
-                Tab.BROWSER -> BrowserScreen(viewModel, holder, Modifier.fillMaxSize())
+                Tab.BROWSER -> BrowserScreen(viewModel, tabManager, Modifier.fillMaxSize())
                 Tab.DOWNLOADS -> DownloadsScreen(Modifier.fillMaxSize())
                 Tab.LIBRARY -> LibraryScreen(Modifier.fillMaxSize())
             }

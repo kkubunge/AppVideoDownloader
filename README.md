@@ -52,9 +52,12 @@
   - 마스터 플레이리스트면 화질 선택 가능
   - AES-128 암호화 플레이리스트 복호화
   - TS → MP4 재컨테이너화(재인코딩 없음)
-- 다른 앱에서 **공유하기**로 링크 전달
+- 다른 앱에서 **공유하기**로 링크 전달 (새 탭에서 열림)
 - 백그라운드 다운로드(포그라운드 서비스 + 알림), 일시정지 / 이어받기 / 취소
 - `Movies/동영상 다운로더` 폴더에 저장 → 갤러리에서 바로 보임
+- **탭** — 최대 8개까지 동시에 열기. 탭마다 감지 목록이 따로 관리됨
+- **즐겨찾기** — 주소 저장 및 목록에서 바로 열기
+- **다운로드 이력** — 전에 받은 영상을 다시 받으려 하면 과거 기록을 보여주고 진행 여부를 확인
 
 ### 지원하지 않음 (의도적)
 | 대상 | 이유 |
@@ -78,12 +81,17 @@ app/src/main/java/com/aiutil/videodownloader/
 ├─ model/Models.kt              DownloadItem, DetectedVideo, HlsVariant, 상태 enum
 ├─ core/Http.kt                 OkHttp 클라이언트 2종(다운로드용 / 탐색용)
 ├─ data/
-│  ├─ DownloadStore.kt          다운로드 목록 영속화(JSON) + StateFlow
-│  └─ DetectionStore.kt         현재 페이지에서 감지한 영상(메모리)
+│  ├─ JsonListStore.kt          목록 하나를 JSON 파일로 보관하는 공통 뼈대
+│  ├─ DownloadStore.kt          다운로드 목록 영속화 + StateFlow
+│  ├─ DownloadHistoryStore.kt   과거 다운로드 기록(보관함에서 지워도 남음)
+│  ├─ BookmarkStore.kt          즐겨찾기 주소 목록
+│  └─ DetectionStore.kt         탭 하나가 감지한 영상(메모리, 탭별 인스턴스)
 ├─ browser/
 │  ├─ VideoSniffer.kt           ★ 요청을 보고 영상인지 판정 (확장자 → HEAD 2단계)
 │  ├─ SnifferWebViewClient.kt   shouldInterceptRequest로 모든 요청 관찰
-│  └─ VideoJsBridge.kt          페이지에 주입하는 DOM 스캐너 + JS 브리지
+│  ├─ VideoJsBridge.kt          페이지에 주입하는 DOM 스캐너 + JS 브리지
+│  ├─ BrowserTab.kt             탭 하나 = WebView + 감지 목록 + 상태
+│  └─ TabManager.kt             탭 열기/닫기/전환 (최대 8개)
 ├─ download/
 │  ├─ DownloadManagerCore.kt    ★ 큐/동시성/상태 전이의 주인
 │  ├─ FileDownloader.kt         Range 이어받기 단일 파일 다운로드
@@ -97,7 +105,7 @@ app/src/main/java/com/aiutil/videodownloader/
 │  ├─ MainActivity.kt           진입점, 알림 권한, 공유 인텐트 수신
 │  ├─ ShareReceiverActivity.kt  공유 텍스트에서 URL 추출
 │  ├─ AppRoot.kt                3탭 Scaffold
-│  ├─ browser/                  BrowserScreen, BrowserViewModel, WebViewHolder, DetectedVideoSheet
+│  ├─ browser/                  BrowserScreen, BrowserViewModel, 감지/탭/즐겨찾기/이력 시트
 │  ├─ downloads/                진행 중 목록
 │  ├─ library/                  완료된 영상 목록
 │  └─ components/               VideoThumbnail

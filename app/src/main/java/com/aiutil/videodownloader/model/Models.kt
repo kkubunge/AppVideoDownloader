@@ -45,6 +45,35 @@ data class HlsVariant(
 }
 
 @Serializable
+data class Bookmark(
+    val id: String,
+    val title: String,
+    val url: String,
+    val createdAt: Long = System.currentTimeMillis(),
+) {
+    val displayTitle: String
+        get() = title.ifBlank { url.substringAfter("://").substringBefore('/') }
+}
+
+/**
+ * 과거 다운로드 기록. [DownloadItem]과 따로 두는 이유는, 보관함에서 영상을 지워도
+ * "전에 받은 적 있다"는 사실은 남아야 하기 때문이다.
+ */
+@Serializable
+data class DownloadHistoryEntry(
+    val downloadId: String,
+    val url: String,
+    val title: String,
+    val fileName: String,
+    val kind: MediaKind,
+    val pageUrl: String? = null,
+    val status: DownloadStatus = DownloadStatus.QUEUED,
+    val sizeBytes: Long = -1L,
+    val recordedAt: Long = System.currentTimeMillis(),
+    val finishedAt: Long? = null,
+)
+
+@Serializable
 data class DownloadItem(
     val id: String,
     val url: String,

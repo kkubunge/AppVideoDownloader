@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.aiutil.videodownloader.data.DownloadHistoryStore
 import com.aiutil.videodownloader.data.DownloadStore
 import com.aiutil.videodownloader.model.DownloadItem
 import com.aiutil.videodownloader.model.DownloadStatus
@@ -31,6 +32,7 @@ import java.util.concurrent.ConcurrentHashMap
 class DownloadManagerCore(
     private val appContext: Context,
     private val store: DownloadStore,
+    private val history: DownloadHistoryStore,
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -51,17 +53,18 @@ class DownloadManagerCore(
 
         val id = UUID.randomUUID().toString()
         val fileName = Names.buildFileName(title, url, kind)
-        store.add(
-            DownloadItem(
-                id = id,
-                url = url,
-                title = title.ifBlank { fileName },
-                fileName = fileName,
-                kind = kind,
-                headers = headers,
-                pageUrl = pageUrl,
-            )
+        val item = DownloadItem(
+            id = id,
+            url = url,
+            title = title.ifBlank { fileName },
+            fileName = fileName,
+            kind = kind,
+            headers = headers,
+            pageUrl = pageUrl,
         )
+        store.add(item)
+        // 받기 시작한 시점에 기록해 둔다. 중간에 실패해도 "시도한 적 있다"는 남아야 한다.
+        history.record(item)
         startJob(id)
         return id
     }
@@ -75,6 +78,7 @@ class DownloadManagerCore(
 
     fun cancel(id: String) {
         store.update(id) { it.copy(status = DownloadStatus.CANCELED) }
+        history.markFinished(id, DownloadStatus.CANCELED, sizeBytes = -1)
         val job = jobs[id]
         if (job != null && job.isActive) {
             job.invokeOnCompletion { partFile(id).delete() }
@@ -170,6 +174,7 @@ class DownloadManagerCore(
             Log.w(TAG, "다운로드 실패: ${item.url}", t)
             val reason = t.message ?: t::class.java.simpleName
             store.update(id) { it.copy(status = DownloadStatus.FAILED, errorMessage = reason) }
+            history.markFinished(id, DownloadStatus.FAILED, sizeBytes = -1)
             store.get(id)?.let { Notifications.showFailed(appContext, it, reason) }
         }
     }
@@ -214,7 +219,14 @@ class DownloadManagerCore(
                 errorMessage = null,
             )
         }
-        store.get(id)?.let { Notifications.showCompleted(appContext, it) }
+        val finished = store.get(id)
+        history.markFinished(
+            downloadId = id,
+            status = DownloadStatus.COMPLETED,
+            sizeBytes = finished?.totalBytes ?: size,
+            fileName = fileName,
+        )
+        finished?.let { Notifications.showCompleted(appContext, it) }
     }
 
     private fun ensureServiceRunning() {

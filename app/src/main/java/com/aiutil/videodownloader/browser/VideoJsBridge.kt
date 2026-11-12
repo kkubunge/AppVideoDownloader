@@ -2,6 +2,7 @@ package com.aiutil.videodownloader.browser
 
 import android.util.Log
 import android.webkit.JavascriptInterface
+import com.aiutil.videodownloader.data.DetectionStore
 import kotlinx.coroutines.CoroutineScope
 import org.json.JSONArray
 
@@ -13,6 +14,7 @@ import org.json.JSONArray
  */
 class VideoJsBridge(
     private val scope: CoroutineScope,
+    private val detections: DetectionStore,
     private val pageInfo: () -> PageInfo,
     private val headers: () -> Map<String, String>,
 ) {
@@ -27,7 +29,7 @@ class VideoJsBridge(
             for (i in 0 until arr.length()) {
                 val url = arr.optJSONObject(i)?.optString("url").orEmpty()
                 if (url.isNotBlank()) {
-                    VideoSniffer.offerFromDom(scope, url, hdrs, info.url, info.title)
+                    VideoSniffer.offerFromDom(scope, detections, url, hdrs, info.url, info.title)
                 }
             }
         } catch (t: Throwable) {

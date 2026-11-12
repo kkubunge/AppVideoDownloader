@@ -16,6 +16,8 @@ import okhttp3.Response
  * 판정은 두 단계다.
  *  1) 확장자/경로만 보고 즉시 판정 — 네트워크를 타지 않으므로 페이지 로딩을 막지 않는다.
  *  2) 애매하면 백그라운드에서 HEAD로 Content-Type을 확인한다.
+ *
+ * 결과는 호출한 탭의 [DetectionStore]에만 들어간다.
  */
 object VideoSniffer {
 
@@ -50,28 +52,15 @@ object VideoSniffer {
     /** 2단계 판정 후보로 올릴 만한 힌트. */
     private val PROBE_HINTS = listOf("video", "/media/", "stream", "playback", "mime=video")
 
-    /** HEAD를 중복으로 날리지 않기 위한 기록. 오래된 것부터 버리는 LRU. */
-    private val inspected = object : LinkedHashMap<String, Unit>(128, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Unit>) = size > 600
-    }
-
-    /** 처음 보는 URL이면 true. 이미 검토한 적이 있으면 false. */
-    private fun markInspected(url: String): Boolean = synchronized(inspected) {
-        inspected.put(url, Unit) == null
-    }
-
     /** MP4로 인정할 최소 크기. 이보다 작으면 광고 범퍼나 미리보기일 가능성이 높다. */
     private const val MIN_MP4_BYTES = 150L * 1024
-
-    fun reset() {
-        synchronized(inspected) { inspected.clear() }
-    }
 
     /**
      * 요청 하나를 검토한다. 호출자(WebViewClient)는 결과를 기다리지 않는다.
      */
     fun offer(
         scope: CoroutineScope,
+        store: DetectionStore,
         url: String,
         requestHeaders: Map<String, String>,
         pageUrl: String,
@@ -84,10 +73,10 @@ object VideoSniffer {
         val ext = extensionOf(lower)
         if (ext in SEGMENT_EXTENSIONS) return
 
-        if (!markInspected(url)) return
+        if (!store.markInspected(url)) return
 
         when {
-            ext in HLS_EXTENSIONS -> DetectionStore.add(
+            ext in HLS_EXTENSIONS -> store.add(
                 DetectedVideo(
                     url = url,
                     pageUrl = pageUrl,
@@ -102,7 +91,7 @@ object VideoSniffer {
                 // 확장자로 이미 확신하지만, 크기를 알면 UI에서 보여줄 수 있으니 가볍게 확인한다.
                 val meta = probeMeta(url, requestHeaders)
                 if (meta != null && meta.contentLength in 1 until MIN_MP4_BYTES) return@launch
-                DetectionStore.add(
+                store.add(
                     DetectedVideo(
                         url = url,
                         pageUrl = pageUrl,
@@ -124,7 +113,7 @@ object VideoSniffer {
                     else -> return@launch
                 }
                 if (kind == MediaKind.MP4 && meta.contentLength in 1 until MIN_MP4_BYTES) return@launch
-                DetectionStore.add(
+                store.add(
                     DetectedVideo(
                         url = url,
                         pageUrl = pageUrl,
@@ -142,6 +131,7 @@ object VideoSniffer {
     /** 페이지 안의 <video> 태그에서 뽑아낸 주소. 네트워크 감지가 놓친 것을 메운다. */
     fun offerFromDom(
         scope: CoroutineScope,
+        store: DetectionStore,
         url: String,
         headers: Map<String, String>,
         pageUrl: String,
@@ -150,7 +140,7 @@ object VideoSniffer {
         // blob:/data: 는 메모리 상의 스트림이라 직접 받을 수 없다. 이런 페이지는
         // 네트워크 단계에서 잡힌 실제 스트림 주소를 써야 한다.
         if (url.startsWith("blob:") || url.startsWith("data:")) return
-        offer(scope, url, headers, pageUrl, pageTitle)
+        offer(scope, store, url, headers, pageUrl, pageTitle)
     }
 
     private data class Meta(val contentType: String?, val contentLength: Long)

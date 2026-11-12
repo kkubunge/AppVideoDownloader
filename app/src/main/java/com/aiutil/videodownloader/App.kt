@@ -1,6 +1,8 @@
 package com.aiutil.videodownloader
 
 import android.app.Application
+import com.aiutil.videodownloader.data.BookmarkStore
+import com.aiutil.videodownloader.data.DownloadHistoryStore
 import com.aiutil.videodownloader.data.DownloadStore
 import com.aiutil.videodownloader.download.DownloadManagerCore
 import com.aiutil.videodownloader.download.Notifications
@@ -11,7 +13,9 @@ class App : Application() {
         super.onCreate()
         instance = this
         store = DownloadStore(this)
-        downloads = DownloadManagerCore(this, store)
+        history = DownloadHistoryStore(this)
+        bookmarks = BookmarkStore(this)
+        downloads = DownloadManagerCore(this, store, history)
         Notifications.createChannels(this)
 
         // 지난 실행이 비정상 종료됐다면 "진행 중"으로 멈춰 있는 항목이 남는다.
@@ -23,6 +27,12 @@ class App : Application() {
             private set
 
         lateinit var store: DownloadStore
+            private set
+
+        lateinit var history: DownloadHistoryStore
+            private set
+
+        lateinit var bookmarks: BookmarkStore
             private set
 
         lateinit var downloads: DownloadManagerCore

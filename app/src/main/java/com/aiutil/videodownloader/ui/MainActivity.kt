@@ -10,14 +10,21 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
+import com.aiutil.videodownloader.browser.TabManager
 import com.aiutil.videodownloader.ui.browser.BrowserViewModel
-import com.aiutil.videodownloader.ui.browser.WebViewHolder
 import com.aiutil.videodownloader.ui.theme.VideoDownloaderTheme
 
 class MainActivity : ComponentActivity() {
 
     private val viewModel: BrowserViewModel by viewModels()
-    private val webViewHolder = WebViewHolder()
+
+    /**
+     * 탭은 WebView(= Activity Context)를 쥐고 있어 ViewModel에 둘 수 없다.
+     * Activity와 수명을 같이한다.
+     */
+    private val tabManager by lazy {
+        TabManager(onDownloadRequested = { viewModel.onDownloadRequested(it) })
+    }
 
     private val requestNotificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* 거부해도 다운로드는 동작한다 */ }
@@ -25,15 +32,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // WebView를 먼저 만들어 두면 공유로 들어온 주소를 첫 화면에서 바로 열 수 있다.
-        webViewHolder.getOrCreate(this, viewModel)
+        // 탭을 먼저 만들어 두면 공유로 들어온 주소를 첫 화면에서 바로 열 수 있다.
+        tabManager.ensureInitialTab(this)
 
         askNotificationPermissionIfNeeded()
         handleIncoming(intent)
 
         setContent {
             VideoDownloaderTheme {
-                AppRoot(viewModel = viewModel, holder = webViewHolder)
+                AppRoot(viewModel = viewModel, tabManager = tabManager)
             }
         }
     }
@@ -45,14 +52,17 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        webViewHolder.destroy()
+        tabManager.destroyAll()
         super.onDestroy()
     }
 
+    /** 공유로 들어온 링크는 새 탭에서 연다 — 보고 있던 페이지를 덮어쓰지 않는다. */
     private fun handleIncoming(intent: Intent?) {
-        intent?.getStringExtra(EXTRA_URL)
-            ?.takeIf { it.isNotBlank() }
-            ?.let { viewModel.open(it) }
+        val url = intent?.getStringExtra(EXTRA_URL)?.takeIf { it.isNotBlank() } ?: return
+        if (tabManager.openTab(this, url) == null) {
+            // 탭이 가득 찼으면 현재 탭에서 연다.
+            viewModel.open(url)
+        }
     }
 
     private fun askNotificationPermissionIfNeeded() {
