@@ -104,14 +104,16 @@ class BrowserTab(
             }
 
             webViewClient = snifferClient
+            // apply의 수신자가 WebView라서 title/progress를 그냥 쓰면 WebView의
+            // 읽기 전용 프로퍼티로 해석된다. 탭의 상태임을 명시해야 한다.
             webChromeClient = object : WebChromeClient() {
                 override fun onReceivedTitle(view: WebView?, received: String?) {
                     snifferClient.currentTitle = received.orEmpty()
-                    title = received.orEmpty()
+                    this@BrowserTab.title = received.orEmpty()
                 }
 
                 override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    progress = newProgress
+                    this@BrowserTab.progress = newProgress
                 }
             }
 
