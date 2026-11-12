@@ -1,7 +1,11 @@
 package com.aiutil.videodownloader.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
@@ -40,7 +44,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     LIBRARY("보관함", Icons.Default.VideoLibrary),
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AppRoot(viewModel: BrowserViewModel, tabManager: TabManager) {
     var selected by rememberSaveable { mutableIntStateOf(0) }
@@ -60,25 +64,31 @@ fun AppRoot(viewModel: BrowserViewModel, tabManager: TabManager) {
         if (viewModel.pendingLoad != null) selected = Tab.BROWSER.ordinal
     }
 
+    // 키보드가 올라오면 하단 탭 바를 치운다. 좁은 화면에서 입력란까지 가리는 것을 막는다.
+    val keyboardVisible = WindowInsets.isImeVisible
+
     Scaffold(
+        modifier = Modifier.imePadding(),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            NavigationBar {
-                Tab.entries.forEachIndexed { index, tab ->
-                    NavigationBarItem(
-                        selected = selected == index,
-                        onClick = { selected = index },
-                        label = { Text(tab.label) },
-                        icon = {
-                            if (tab == Tab.DOWNLOADS && activeCount > 0) {
-                                BadgedBox(badge = { Badge { Text("$activeCount") } }) {
+            if (!keyboardVisible) {
+                NavigationBar {
+                    Tab.entries.forEachIndexed { index, tab ->
+                        NavigationBarItem(
+                            selected = selected == index,
+                            onClick = { selected = index },
+                            label = { Text(tab.label) },
+                            icon = {
+                                if (tab == Tab.DOWNLOADS && activeCount > 0) {
+                                    BadgedBox(badge = { Badge { Text("$activeCount") } }) {
+                                        Icon(tab.icon, contentDescription = tab.label)
+                                    }
+                                } else {
                                     Icon(tab.icon, contentDescription = tab.label)
                                 }
-                            } else {
-                                Icon(tab.icon, contentDescription = tab.label)
-                            }
-                        },
-                    )
+                            },
+                        )
+                    }
                 }
             }
         },

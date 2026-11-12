@@ -29,11 +29,15 @@ object HlsDownloader {
     private const val PREFETCH = 3
 
     sealed interface Resolved {
-        /** 마스터 플레이리스트 — 화질을 골라야 한다. */
-        data class Variants(val variants: List<HlsVariant>) : Resolved
+        /** 마스터 플레이리스트 — 화질을 골라야 한다. [durationSec]은 화질과 무관하게 같다. */
+        data class Variants(val variants: List<HlsVariant>, val durationSec: Double) : Resolved
 
         /** 바로 받을 수 있는 미디어 플레이리스트. */
-        data class Media(val playlistUrl: String, val playlist: M3u8Parser.MediaPlaylist) : Resolved
+        data class Media(
+            val playlistUrl: String,
+            val playlist: M3u8Parser.MediaPlaylist,
+            val estimatedBytes: Long,
+        ) : Resolved
     }
 
     data class Outcome(val bytes: Long, val isFragmentedMp4: Boolean)
@@ -46,11 +50,52 @@ object HlsDownloader {
                 if (variants.isEmpty()) {
                     throw IOException("마스터 플레이리스트에서 화질 목록을 찾지 못했다")
                 }
-                Resolved.Variants(variants)
+                // 재생 길이는 어느 화질이든 같다. 가장 가벼운 것 하나만 읽어 길이를 얻는다.
+                val duration = runCatching {
+                    val lightest = variants.minByOrNull { it.bandwidth } ?: variants.last()
+                    M3u8Parser.parseMedia(fetchText(lightest.url, headers), lightest.url)
+                        .totalDurationSec
+                }.getOrDefault(0.0)
+
+                Resolved.Variants(variants, duration)
             } else {
-                Resolved.Media(url, M3u8Parser.parseMedia(text, url))
+                val playlist = M3u8Parser.parseMedia(text, url)
+                Resolved.Media(url, playlist, estimateFromFirstSegment(playlist, headers))
             }
         }
+
+    /**
+     * 화질별 예상 용량. 비트레이트 × 재생시간 ÷ 8.
+     * 실제 크기와는 보통 10% 안쪽으로 차이 난다.
+     */
+    fun estimateBytes(bandwidth: Long, durationSec: Double): Long =
+        if (bandwidth <= 0 || durationSec <= 0) -1L else (bandwidth * durationSec / 8).toLong()
+
+    /**
+     * 마스터 없이 미디어 플레이리스트만 있을 때는 비트레이트를 알 수 없다.
+     * 첫 조각 크기를 재생시간 비율로 환산해 전체를 가늠한다 — 요청 한 번이면 된다.
+     */
+    private fun estimateFromFirstSegment(
+        playlist: M3u8Parser.MediaPlaylist,
+        headers: Map<String, String>,
+    ): Long {
+        val first = playlist.segments.firstOrNull() ?: return -1L
+        if (playlist.totalDurationSec <= 0 || first.durationSec <= 0) return -1L
+
+        val size = runCatching { contentLengthOf(first.url, headers) }.getOrDefault(-1L)
+        if (size <= 0) return -1L
+        return (size / first.durationSec * playlist.totalDurationSec).toLong()
+    }
+
+    private fun contentLengthOf(url: String, headers: Map<String, String>): Long {
+        Http.probeClient.newCall(Http.requestBuilder(url, headers).head().build()).execute()
+            .use { resp ->
+                if (resp.isSuccessful) {
+                    resp.header("Content-Length")?.toLongOrNull()?.let { return it }
+                }
+            }
+        return -1L
+    }
 
     /**
      * [playlistUrl]의 세그먼트를 [target]에 이어 붙인다.

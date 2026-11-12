@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
@@ -31,6 +32,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 키보드 인셋을 Compose가 직접 다루게 한다. 매니페스트의 adjustResize와 짝이다.
+        enableEdgeToEdge()
 
         // 탭을 먼저 만들어 두면 공유로 들어온 주소를 첫 화면에서 바로 열 수 있다.
         tabManager.ensureInitialTab(this)

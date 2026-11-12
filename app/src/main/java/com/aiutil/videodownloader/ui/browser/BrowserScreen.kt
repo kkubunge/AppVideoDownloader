@@ -225,11 +225,13 @@ fun BrowserScreen(
         )
     }
 
-    viewModel.qualityPrompt?.let { prompt ->
-        QualityPickerDialog(
-            variants = prompt.variants,
-            onPick = viewModel::chooseVariant,
-            onDismiss = viewModel::dismissQualityPrompt,
+    viewModel.downloadPlan?.let { plan ->
+        DownloadConfirmSheet(
+            plan = plan,
+            selectedIndex = viewModel.selectedVariantIndex,
+            onSelectVariant = viewModel::selectVariant,
+            onConfirm = viewModel::confirmDownload,
+            onDismiss = viewModel::dismissPlan,
         )
     }
 }

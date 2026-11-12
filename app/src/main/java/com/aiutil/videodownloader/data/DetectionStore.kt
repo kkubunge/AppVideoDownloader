@@ -27,10 +27,31 @@ class DetectionStore {
             size > MAX_INSPECTED
     }
 
-    /** 새 페이지로 이동하면 이전 후보를 버린다. 같은 페이지 내 이동(해시 변경 등)은 유지. */
+    /** 실제로 새 문서를 열었을 때. 이전 후보는 의미가 없으므로 버린다. */
     @Synchronized
-    fun onPageChanged(pageUrl: String) {
-        if (normalize(pageUrl) == normalize(currentPage)) return
+    fun onNewDocument(pageUrl: String) {
+        if (samePath(pageUrl, currentPage)) {
+            currentPage = pageUrl
+            return
+        }
+        reset(pageUrl)
+    }
+
+    /**
+     * SPA 내부 이동(주소만 바뀌고 문서는 그대로). 피드를 스크롤하는 것만으로도 수시로
+     * 불리므로, 호스트가 실제로 바뀐 게 아니면 찾아 둔 영상을 유지한다 —
+     * 스크롤 한 번에 '받기' 버튼이 사라지면 쓸 수가 없다.
+     */
+    @Synchronized
+    fun onSoftNavigation(pageUrl: String) {
+        if (hostOf(pageUrl) == hostOf(currentPage)) {
+            currentPage = pageUrl
+            return
+        }
+        reset(pageUrl)
+    }
+
+    private fun reset(pageUrl: String) {
         currentPage = pageUrl
         _videos.value = emptyList()
         inspected.clear()
@@ -53,7 +74,18 @@ class DetectionStore {
         inspected.clear()
     }
 
-    private fun normalize(url: String): String = url.substringBefore('#')
+    /** 질의 문자열과 해시를 뺀 경로만 비교한다. `?t=123` 같은 변화로 목록을 날리지 않기 위해서다. */
+    private fun samePath(a: String, b: String): Boolean =
+        pathKey(a) == pathKey(b) && pathKey(a).isNotEmpty()
+
+    private fun pathKey(url: String): String = runCatching {
+        val u = java.net.URL(url)
+        "${u.host}${u.path}".lowercase().trimEnd('/')
+    }.getOrDefault("")
+
+    private fun hostOf(url: String): String = runCatching {
+        java.net.URL(url).host.lowercase()
+    }.getOrDefault("")
 
     private companion object {
         const val MAX_VIDEOS = 50

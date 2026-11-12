@@ -47,7 +47,7 @@ class SnifferWebViewClient(
         super.onPageStarted(view, url, favicon)
         currentUrl = url
         currentTitle = view.title.orEmpty()
-        detections.onPageChanged(url)
+        detections.onNewDocument(url)
         onLoadingChanged(true)
         onNavigate(url, view.canGoBack())
     }
@@ -65,7 +65,7 @@ class SnifferWebViewClient(
         super.doUpdateVisitedHistory(view, url, isReload)
         // SPA는 페이지 전환을 해도 onPageStarted가 오지 않는다. 여기서 보강한다.
         currentUrl = url
-        detections.onPageChanged(url)
+        detections.onSoftNavigation(url)
         onNavigate(url, view.canGoBack())
     }
 

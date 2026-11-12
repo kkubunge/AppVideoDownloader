@@ -11,6 +11,7 @@ import com.aiutil.videodownloader.model.DetectedVideo
 import com.aiutil.videodownloader.model.DownloadHistoryEntry
 import com.aiutil.videodownloader.model.HlsVariant
 import com.aiutil.videodownloader.model.MediaKind
+import com.aiutil.videodownloader.util.Names
 import kotlinx.coroutines.launch
 
 class BrowserViewModel : ViewModel() {
@@ -18,15 +19,32 @@ class BrowserViewModel : ViewModel() {
     /** 브라우저 위에 띄우는 바텀시트 종류. 한 번에 하나만 뜬다. */
     enum class Sheet { DETECTED, TABS, BOOKMARKS, HISTORY }
 
-    /** HLS 마스터를 열었을 때 사용자에게 보여줄 화질 목록. */
-    data class QualityPrompt(val source: DetectedVideo, val variants: List<HlsVariant>)
-
     /** 전에 받은 적 있는 영상을 다시 받으려 할 때 보여줄 확인 내용. */
     data class HistoryPrompt(val source: DetectedVideo, val entries: List<DownloadHistoryEntry>)
 
+    /** 고를 수 있는 화질 하나와 그 예상 용량. */
+    data class VariantOption(val variant: HlsVariant, val estimatedBytes: Long)
+
+    /**
+     * 받기 직전에 보여줄 내용. 파일 이름과 용량을 먼저 확인시키고, 화질이 여러 개면
+     * 몇 개인지와 각각의 용량을 함께 보여준다.
+     */
+    data class DownloadPlan(
+        val source: DetectedVideo,
+        val fileName: String,
+        val kind: MediaKind,
+        val sizeBytes: Long,
+        val variants: List<VariantOption>,
+        val durationSec: Double,
+        /** HLS 용량은 계산으로 가늠한 값이라 "약"을 붙여 보여준다. */
+        val isEstimate: Boolean,
+    )
+
     var addressText by mutableStateOf("")
     var sheet by mutableStateOf<Sheet?>(null)
-    var qualityPrompt by mutableStateOf<QualityPrompt?>(null)
+    var downloadPlan by mutableStateOf<DownloadPlan?>(null)
+        private set
+    var selectedVariantIndex by mutableStateOf(0)
         private set
     var historyPrompt by mutableStateOf<HistoryPrompt?>(null)
         private set
@@ -81,48 +99,93 @@ class BrowserViewModel : ViewModel() {
             historyPrompt = HistoryPrompt(video, past)
             return
         }
-        startDownload(video)
+        preparePlan(video)
     }
 
     /** 이력 팝업에서 "다시 받기"를 고른 경우. */
     fun confirmHistoryDownload() {
         val prompt = historyPrompt ?: return
         historyPrompt = null
-        startDownload(prompt.source)
+        preparePlan(prompt.source)
     }
 
     fun dismissHistoryPrompt() {
         historyPrompt = null
     }
 
-    fun chooseVariant(variant: HlsVariant) {
-        val prompt = qualityPrompt ?: return
-        qualityPrompt = null
+    fun selectVariant(index: Int) {
+        selectedVariantIndex = index
+    }
+
+    /** 확인 시트에서 "받기"를 누른 경우. 고른 화질로 큐에 넣는다. */
+    fun confirmDownload() {
+        val plan = downloadPlan ?: return
+        downloadPlan = null
+
+        if (plan.variants.isEmpty()) {
+            enqueue(plan.source.url, plan.source.displayName, plan.kind, plan.source)
+            return
+        }
+
+        val chosen = plan.variants.getOrNull(selectedVariantIndex) ?: plan.variants.first()
         enqueue(
-            url = variant.url,
-            title = "${prompt.source.displayName} (${variant.label})",
+            url = chosen.variant.url,
+            title = "${plan.source.displayName} (${chosen.variant.label})",
             kind = MediaKind.HLS,
-            source = prompt.source,
+            source = plan.source,
         )
     }
 
-    fun dismissQualityPrompt() {
-        qualityPrompt = null
+    fun dismissPlan() {
+        downloadPlan = null
     }
 
-    private fun startDownload(video: DetectedVideo) {
+    /** 받기 전에 보여줄 정보(파일명·용량·화질 수)를 모은다. */
+    private fun preparePlan(video: DetectedVideo) {
         when (video.kind) {
-            MediaKind.MP4 -> enqueue(video.url, video.displayName, MediaKind.MP4, video)
+            MediaKind.MP4 -> {
+                downloadPlan = DownloadPlan(
+                    source = video,
+                    fileName = Names.buildFileName(video.displayName, video.url, MediaKind.MP4),
+                    kind = MediaKind.MP4,
+                    sizeBytes = video.sizeBytes,
+                    variants = emptyList(),
+                    durationSec = 0.0,
+                    isEstimate = false,
+                )
+            }
 
             MediaKind.HLS -> viewModelScope.launch {
                 resolving = true
                 try {
-                    when (val resolved = HlsDownloader.resolve(video.url, video.headers)) {
-                        is HlsDownloader.Resolved.Variants ->
-                            qualityPrompt = QualityPrompt(video, resolved.variants)
+                    val fileName = Names.buildFileName(video.displayName, video.url, MediaKind.HLS)
+                    downloadPlan = when (val resolved = HlsDownloader.resolve(video.url, video.headers)) {
+                        is HlsDownloader.Resolved.Variants -> {
+                            val options = resolved.variants.map {
+                                VariantOption(it, HlsDownloader.estimateBytes(it.bandwidth, resolved.durationSec))
+                            }
+                            // 목록은 비트레이트 내림차순이라 0번이 가장 좋은 화질이다.
+                            selectedVariantIndex = 0
+                            DownloadPlan(
+                                source = video,
+                                fileName = fileName,
+                                kind = MediaKind.HLS,
+                                sizeBytes = options.firstOrNull()?.estimatedBytes ?: -1L,
+                                variants = options,
+                                durationSec = resolved.durationSec,
+                                isEstimate = true,
+                            )
+                        }
 
-                        is HlsDownloader.Resolved.Media ->
-                            enqueue(video.url, video.displayName, MediaKind.HLS, video)
+                        is HlsDownloader.Resolved.Media -> DownloadPlan(
+                            source = video,
+                            fileName = fileName,
+                            kind = MediaKind.HLS,
+                            sizeBytes = resolved.estimatedBytes,
+                            variants = emptyList(),
+                            durationSec = resolved.playlist.totalDurationSec,
+                            isEstimate = true,
+                        )
                     }
                 } catch (t: Throwable) {
                     toast = "스트림 정보를 읽지 못했습니다: ${t.message ?: "알 수 없는 오류"}"

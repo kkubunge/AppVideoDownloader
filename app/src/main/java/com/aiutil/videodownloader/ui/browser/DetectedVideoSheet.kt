@@ -12,7 +12,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,7 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aiutil.videodownloader.model.DetectedVideo
-import com.aiutil.videodownloader.model.HlsVariant
 import com.aiutil.videodownloader.model.MediaKind
 import com.aiutil.videodownloader.util.Format
 
@@ -112,43 +110,4 @@ private fun DetectedVideoRow(video: DetectedVideo, onDownload: () -> Unit) {
             Text("받기", modifier = Modifier.padding(start = 6.dp))
         }
     }
-}
-
-@Composable
-fun QualityPickerDialog(
-    variants: List<HlsVariant>,
-    onPick: (HlsVariant) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("화질 선택") },
-        text = {
-            LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
-                items(variants, key = { it.url }) { variant ->
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onPick(variant) }
-                            .padding(vertical = 12.dp),
-                    ) {
-                        Text(variant.label, style = MaterialTheme.typography.bodyLarge)
-                        if (variant.bandwidth > 0) {
-                            Text(
-                                text = String.format(
-                                    java.util.Locale.US,
-                                    "약 %.1f Mbps",
-                                    variant.bandwidth / 1_000_000.0,
-                                ) + if (variant.width > 0) " · ${variant.width}x${variant.height}" else "",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
-    )
 }
