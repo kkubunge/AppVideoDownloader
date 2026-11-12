@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  다크모드용 창 테마. Compose가 그리기 전의 창 배경에만 쓰인다.
+  이것이 없으면 다크모드에서도 앱을 열 때 흰 화면이 한 번 번쩍인다.
+-->
+<resources>
+    <style name="Theme.VideoDownloader" parent="android:Theme.Material.NoActionBar" />
+</resources>

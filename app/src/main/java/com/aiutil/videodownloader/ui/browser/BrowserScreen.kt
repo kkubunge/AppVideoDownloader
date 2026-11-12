@@ -130,6 +130,10 @@ fun BrowserScreen(
             isBookmarked = isBookmarked,
         )
 
+        // 페이지 내용과 주소창 사이의 경계. 사이트 배경이 밝으면 이 선이 없을 때
+        // 주소창이 어디까지인지 알 수 없다.
+        HorizontalDivider()
+
         // 진행률을 알 수 있으면 그대로 보여주고, 아직 모를 때만 불확정 막대를 쓴다.
         activeTab?.takeIf { it.isLoading }?.let { tab ->
             if (tab.progress in 1..99) {
@@ -295,7 +299,9 @@ private fun AddressBar(
     val activeTab = tabManager.activeTab
     var menuOpen by remember { mutableStateOf(false) }
 
-    Surface(tonalElevation = 2.dp) {
+    // tonalElevation만으로는 아래 페이지 배경과 거의 같은 색이라 주소창의 경계가
+    // 보이지 않는다. 한 단계 진한 컨테이너 색을 쓰고 아래에 구분선을 둔다.
+    Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -321,9 +327,14 @@ private fun AddressBar(
                 placeholder = { Text("주소 또는 검색어") },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(onGo = { viewModel.submitAddress() }),
+                shape = RoundedCornerShape(22.dp),
                 colors = TextFieldDefaults.colors(
+                    // 입력란임이 한눈에 보이도록 주변보다 밝기를 분명히 달리한다.
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
                 ),
             )
 

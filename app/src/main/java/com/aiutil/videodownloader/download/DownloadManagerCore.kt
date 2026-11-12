@@ -117,6 +117,24 @@ class DownloadManagerCore(
         store.remove(id)
     }
 
+    /** 여러 항목을 한 번에 지운다. 보관함의 선택 삭제가 쓴다. */
+    fun removeAll(ids: Collection<String>, deleteFile: Boolean) {
+        if (ids.isEmpty()) return
+        val idSet = ids.toSet()
+
+        store.items.value.filter { it.id in idSet }.forEach { item ->
+            jobs[item.id]?.cancel()
+            partFile(item.id).delete()
+            if (deleteFile && item.outputUri != null) {
+                runCatching {
+                    appContext.contentResolver.delete(Uri.parse(item.outputUri), null, null)
+                }.onFailure { Log.w(TAG, "저장된 파일 삭제 실패: ${item.fileName}", it) }
+            }
+        }
+
+        store.removeWhere { it.id in idSet }
+    }
+
     fun pauseAll() {
         store.items.value.filter { it.status.isActive }.forEach { pause(it.id) }
     }

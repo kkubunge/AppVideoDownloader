@@ -1,31 +1,38 @@
 package com.aiutil.videodownloader.ui.library
 
-import androidx.compose.foundation.clickable
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,48 +64,123 @@ fun LibraryScreen(
         .filter { it.status == DownloadStatus.COMPLETED }
         .sortedByDescending { it.completedAt ?: it.createdAt }
 
-    var pendingDelete by remember { mutableStateOf<DownloadItem?>(null) }
+    var selectedIds by remember { mutableStateOf(emptySet<String>()) }
+    var pendingSingleDelete by remember { mutableStateOf<DownloadItem?>(null) }
+    var confirmBulkDelete by remember { mutableStateOf(false) }
+
+    // 목록에서 사라진 항목이 선택에 남아 있으면 개수가 어긋난다.
+    LaunchedEffect(completed) {
+        val ids = completed.mapTo(HashSet()) { it.id }
+        if (selectedIds.any { it !in ids }) selectedIds = selectedIds.intersect(ids)
+    }
+
+    val selectionMode = selectedIds.isNotEmpty()
+    BackHandler(enabled = selectionMode) { selectedIds = emptySet() }
 
     if (completed.isEmpty()) {
         EmptyMessage(text = "저장된 영상이 없습니다.", modifier = modifier)
         return
     }
 
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        items(completed, key = { it.id }) { item ->
-            LibraryRow(
-                item = item,
-                onOpenLink = onOpenLink,
-                onDeleteRequest = { pendingDelete = item },
+    Column(modifier.fillMaxSize()) {
+        if (selectionMode) {
+            SelectionBar(
+                selectedCount = selectedIds.size,
+                totalCount = completed.size,
+                onSelectAll = { selectedIds = completed.mapTo(HashSet()) { it.id } },
+                onClear = { selectedIds = emptySet() },
+                onDelete = { confirmBulkDelete = true },
             )
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(completed, key = { it.id }) { item ->
+                LibraryRow(
+                    item = item,
+                    selectionMode = selectionMode,
+                    selected = item.id in selectedIds,
+                    onToggleSelect = {
+                        selectedIds = if (item.id in selectedIds) {
+                            selectedIds - item.id
+                        } else {
+                            selectedIds + item.id
+                        }
+                    },
+                    onOpenLink = onOpenLink,
+                    onDeleteRequest = { pendingSingleDelete = item },
+                )
+            }
         }
     }
 
-    pendingDelete?.let { target ->
-        AlertDialog(
-            onDismissRequest = { pendingDelete = null },
-            title = { Text("영상을 삭제할까요?") },
-            text = { Text("${target.fileName}\n기기에 저장된 파일까지 지워집니다.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    App.downloads.remove(target.id, deleteFile = true)
-                    pendingDelete = null
-                }) { Text("삭제") }
+    pendingSingleDelete?.let { target ->
+        DeleteDialog(
+            title = "영상을 삭제할까요?",
+            message = "${target.fileName}\n기기에 저장된 파일까지 지워집니다.",
+            onConfirm = {
+                App.downloads.remove(target.id, deleteFile = true)
+                pendingSingleDelete = null
             },
-            dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("취소") }
+            onDismiss = { pendingSingleDelete = null },
+        )
+    }
+
+    if (confirmBulkDelete) {
+        DeleteDialog(
+            title = "선택한 ${selectedIds.size}개를 삭제할까요?",
+            message = "기기에 저장된 파일까지 지워집니다. 되돌릴 수 없습니다.",
+            onConfirm = {
+                App.downloads.removeAll(selectedIds, deleteFile = true)
+                selectedIds = emptySet()
+                confirmBulkDelete = false
             },
+            onDismiss = { confirmBulkDelete = false },
         )
     }
 }
 
 @Composable
+private fun SelectionBar(
+    selectedCount: Int,
+    totalCount: Int,
+    onSelectAll: () -> Unit,
+    onClear: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onClear) {
+                Icon(Icons.Default.Close, contentDescription = "선택 해제")
+            }
+            Text(
+                text = "${selectedCount}개 선택",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = onSelectAll, enabled = selectedCount < totalCount) {
+                Text("전체 선택")
+            }
+            TextButton(onClick = onDelete) { Text("삭제") }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
 private fun LibraryRow(
     item: DownloadItem,
+    selectionMode: Boolean,
+    selected: Boolean,
+    onToggleSelect: () -> Unit,
     onOpenLink: (String) -> Unit,
     onDeleteRequest: () -> Unit,
 ) {
@@ -108,14 +190,30 @@ private fun LibraryRow(
     val pageUrl = item.pageUrl?.takeIf { it.isNotBlank() }
 
     Card(
+        colors = if (selected) {
+            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        } else {
+            CardDefaults.cardColors()
+        },
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { MediaIntents.play(context, item.outputUri, mimeType) }
+            .combinedClickable(
+                // 선택 중에는 탭이 선택 전환, 평소에는 재생.
+                onClick = {
+                    if (selectionMode) onToggleSelect()
+                    else MediaIntents.play(context, item.outputUri, mimeType)
+                },
+                onLongClick = onToggleSelect,
+            )
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (selectionMode) {
+                Checkbox(checked = selected, onCheckedChange = { onToggleSelect() })
+            }
+
             VideoThumbnail(
                 uri = item.outputUri,
                 modifier = Modifier
@@ -153,42 +251,68 @@ private fun LibraryRow(
                 }
             }
 
-            Box {
-                IconButton(onClick = { menuOpen = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "더보기")
-                }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text("공유") },
-                        onClick = {
-                            menuOpen = false
-                            MediaIntents.share(context, item.outputUri, mimeType)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("원본 페이지 열기") },
-                        enabled = pageUrl != null,
-                        onClick = {
-                            menuOpen = false
-                            pageUrl?.let(onOpenLink)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("영상 주소 복사") },
-                        onClick = {
-                            menuOpen = false
-                            Clip.copy(context, item.url)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("삭제") },
-                        onClick = {
-                            menuOpen = false
-                            onDeleteRequest()
-                        },
-                    )
+            // 선택 중에는 개별 메뉴를 숨긴다. 두 조작이 겹치면 헷갈린다.
+            if (!selectionMode) {
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "더보기")
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("공유") },
+                            onClick = {
+                                menuOpen = false
+                                MediaIntents.share(context, item.outputUri, mimeType)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("원본 페이지 열기") },
+                            enabled = pageUrl != null,
+                            onClick = {
+                                menuOpen = false
+                                pageUrl?.let(onOpenLink)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("영상 주소 복사") },
+                            onClick = {
+                                menuOpen = false
+                                Clip.copy(context, item.url)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("선택") },
+                            onClick = {
+                                menuOpen = false
+                                onToggleSelect()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("삭제") },
+                            onClick = {
+                                menuOpen = false
+                                onDeleteRequest()
+                            },
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun DeleteDialog(
+    title: String,
+    message: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("삭제") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+    )
 }
