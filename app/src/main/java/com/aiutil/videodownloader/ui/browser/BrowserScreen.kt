@@ -24,8 +24,10 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VideoLibrary
@@ -388,6 +390,16 @@ private fun AddressBar(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
             }
 
+            IconButton(
+                onClick = {
+                    activeTab?.goHome()
+                    viewModel.addressText = ""
+                },
+                enabled = activeTab?.url?.isNotBlank() == true,
+            ) {
+                Icon(Icons.Default.Home, contentDescription = "시작 화면")
+            }
+
             val fieldShape = RoundedCornerShape(22.dp)
             TextField(
                 value = viewModel.addressText,
@@ -404,6 +416,19 @@ private fun AddressBar(
                 },
                 leadingIcon = {
                     Icon(Icons.Default.Search, contentDescription = null, tint = barContentColor)
+                },
+                // 이동은 입력란 안에 둔다. 바깥에 버튼을 더 두면 주소가 보일 자리가 줄어든다.
+                trailingIcon = {
+                    IconButton(
+                        onClick = { viewModel.submitAddress() },
+                        enabled = viewModel.addressText.isNotBlank(),
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "이동",
+                            tint = barContentColor,
+                        )
+                    }
                 },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(onGo = { viewModel.submitAddress() }),

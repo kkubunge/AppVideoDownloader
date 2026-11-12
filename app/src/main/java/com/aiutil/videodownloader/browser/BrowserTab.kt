@@ -74,7 +74,8 @@ class BrowserTab(
             scope = scope,
             detections = detections,
             onNavigate = { navigatedUrl, back ->
-                url = navigatedUrl
+                // about:blank은 '빈 탭'을 뜻한다. 주소로 보이면 시작 화면이 가려진다.
+                url = if (navigatedUrl == BLANK_PAGE) "" else navigatedUrl
                 canGoBack = back
                 onStateChanged()
             },
@@ -173,6 +174,16 @@ class BrowserTab(
         onStateChanged()
     }
 
+    /** 시작 화면으로 돌아간다. 보던 페이지를 비우고 찾아 둔 영상도 버린다. */
+    fun goHome() {
+        pendingUrl = null
+        url = ""
+        title = ""
+        detections.clear()
+        webView.loadUrl(BLANK_PAGE)
+        onStateChanged()
+    }
+
     /** 복원된 탭을 처음 볼 때 호출한다. 불러올 것이 없으면 아무 일도 하지 않는다. */
     fun loadPendingIfNeeded() {
         val target = pendingUrl ?: return
@@ -209,4 +220,8 @@ class BrowserTab(
     private fun hostOf(value: String): String = runCatching {
         java.net.URL(value).host.removePrefix("www.")
     }.getOrDefault("")
+
+    private companion object {
+        const val BLANK_PAGE = "about:blank"
+    }
 }
