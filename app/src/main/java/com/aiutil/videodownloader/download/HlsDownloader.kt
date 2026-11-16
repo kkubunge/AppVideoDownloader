@@ -169,7 +169,14 @@ object HlsDownloader {
         startBytes: Long,
         onProgress: (segmentIndex: Int, segmentCount: Int, bytes: Long) -> Unit,
     ): Outcome = withContext(Dispatchers.IO) {
-        val video = downloadTrack(playlistUrl, headers, target, startSegment, startBytes, onProgress)
+        val video = downloadTrack(
+            playlistUrl = playlistUrl,
+            headers = headers,
+            target = target,
+            startSegment = startSegment,
+            startBytes = startBytes,
+            onProgress = onProgress,
+        )
 
         // 영상과 소리를 따로 보내는 스트림이면 소리도 받아 둔다. 나중에 하나로 합친다.
         val audioFile = audioUrl?.let { url ->
