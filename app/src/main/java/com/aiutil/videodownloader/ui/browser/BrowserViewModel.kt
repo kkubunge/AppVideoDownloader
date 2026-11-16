@@ -139,6 +139,8 @@ class BrowserViewModel : ViewModel() {
             title = "${plan.source.displayName} (${chosen.variant.label})",
             kind = MediaKind.HLS,
             source = plan.source,
+            // 영상과 소리가 따로 오는 스트림이면 소리 주소도 함께 넘긴다.
+            audioUrl = chosen.variant.audioUrl,
         )
     }
 
@@ -240,13 +242,20 @@ class BrowserViewModel : ViewModel() {
         }
     }
 
-    private fun enqueue(url: String, title: String, kind: MediaKind, source: DetectedVideo) {
+    private fun enqueue(
+        url: String,
+        title: String,
+        kind: MediaKind,
+        source: DetectedVideo,
+        audioUrl: String? = null,
+    ) {
         App.downloads.enqueue(
             url = url,
             title = title,
             kind = kind,
             headers = source.headers,
             pageUrl = source.pageUrl,
+            audioUrl = audioUrl,
         )
         toast = "다운로드를 시작했습니다"
     }

@@ -86,6 +86,12 @@ class VideoJsBridge(
           var bridge = window.${NAME};
           if (!bridge) return;
 
+          // 뒤로 갔을 때 보던 자리로 돌아가게 한다. 직접 관리하겠다고 선언해 놓고
+          // 제대로 되돌리지 않는 사이트가 있어, 브라우저에 맡기도록 되돌린다.
+          try {
+            if ('scrollRestoration' in history) history.scrollRestoration = 'auto';
+          } catch (e) { }
+
           function absolute(u) {
             try { return new URL(u, document.baseURI).href; } catch (e) { return u; }
           }

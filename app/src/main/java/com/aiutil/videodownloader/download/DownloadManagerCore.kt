@@ -51,6 +51,7 @@ class DownloadManagerCore(
         kind: MediaKind,
         headers: Map<String, String>,
         pageUrl: String? = null,
+        audioUrl: String? = null,
     ): String {
         store.findActiveByUrl(url)?.let { return it.id }
 
@@ -64,6 +65,7 @@ class DownloadManagerCore(
             kind = kind,
             headers = headers,
             pageUrl = pageUrl,
+            audioUrl = audioUrl,
         )
         store.add(item)
         // 받기 시작한 시점에 기록해 둔다. 중간에 실패해도 "시도한 적 있다"는 남아야 한다.
@@ -130,6 +132,7 @@ class DownloadManagerCore(
         kind = item.kind,
         headers = item.headers,
         pageUrl = item.pageUrl,
+        audioUrl = item.audioUrl,
     )
 
     /** 여러 항목을 한 번에 지운다. 보관함의 선택 삭제가 쓴다. */
@@ -214,6 +217,7 @@ class DownloadManagerCore(
                 MediaKind.HLS -> {
                     val outcome = HlsDownloader.download(
                         playlistUrl = item.url,
+                        audioUrl = item.audioUrl,
                         headers = item.headers,
                         target = part,
                         startSegment = item.segmentIndex,
@@ -247,11 +251,14 @@ class DownloadManagerCore(
      */
     private fun publishHls(id: String, part: File, outcome: HlsDownloader.Outcome) {
         val converted = File(part.parentFile, "$id.mp4")
-        if (Mp4Remuxer.remux(part, converted)) {
-            part.delete()
+        val sources = listOfNotNull(part, outcome.audioFile)
+
+        if (Mp4Remuxer.remux(sources, converted)) {
+            sources.forEach { it.delete() }
             publish(id, converted, "mp4", remuxed = true)
             return
         }
+        outcome.audioFile?.delete()
 
         // 변환이 안 되면 받은 그대로 둔다. 전용 재생기로는 열 수 있다.
         publish(

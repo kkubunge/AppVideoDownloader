@@ -35,6 +35,8 @@ data class HlsVariant(
     val width: Int = 0,
     val height: Int = 0,
     val codecs: String? = null,
+    /** 소리가 따로 오는 스트림이면 그 주소. 영상과 함께 받아 합쳐야 한다. */
+    val audioUrl: String? = null,
 ) {
     val label: String
         get() = when {
@@ -81,6 +83,8 @@ data class DownloadItem(
     val fileName: String,
     val kind: MediaKind,
     val pageUrl: String? = null,
+    /** 소리가 따로 오는 스트림이면 그 주소. 영상과 함께 받아 합친다. */
+    val audioUrl: String? = null,
     val status: DownloadStatus = DownloadStatus.QUEUED,
     val bytesDownloaded: Long = 0L,
     val totalBytes: Long = -1L,

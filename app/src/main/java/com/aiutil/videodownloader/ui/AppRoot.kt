@@ -36,8 +36,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiutil.videodownloader.App
 import com.aiutil.videodownloader.browser.TabManager
+import com.aiutil.videodownloader.model.DetectedVideo
 import com.aiutil.videodownloader.ui.browser.BrowserScreen
 import com.aiutil.videodownloader.ui.browser.BrowserViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.aiutil.videodownloader.ui.downloads.DownloadsScreen
 import com.aiutil.videodownloader.ui.library.LibraryScreen
 
@@ -55,6 +57,19 @@ fun AppRoot(viewModel: BrowserViewModel, tabManager: TabManager) {
     val snackbarHostState = remember { SnackbarHostState() }
     val items by App.store.items.collectAsStateWithLifecycle()
     val activeCount = items.count { it.status.isActive }
+
+    // 받기 버튼은 하단 막대에 둔다. 페이지 위에 떠 있으면 내용을 가린다.
+    val activeTab = tabManager.activeTab
+    val detectionFlow = remember(activeTab?.id) {
+        activeTab?.detections?.videos ?: MutableStateFlow(emptyList<DetectedVideo>())
+    }
+    val detected by detectionFlow.collectAsStateWithLifecycle()
+    val onScreenFlow = remember(activeTab?.id) {
+        activeTab?.detections?.onScreenVideos ?: MutableStateFlow(emptyList<DetectedVideo>())
+    }
+    val onScreen by onScreenFlow.collectAsStateWithLifecycle()
+
+    val showDownloadAction = selected == Tab.BROWSER.ordinal && detected.isNotEmpty()
 
     LaunchedEffect(viewModel.toast) {
         viewModel.toast?.let {
@@ -97,6 +112,28 @@ fun AppRoot(viewModel: BrowserViewModel, tabManager: TabManager) {
                                     }
                                 } else {
                                     Icon(tab.icon, contentDescription = tab.label)
+                                }
+                            },
+                        )
+                    }
+
+                    if (showDownloadAction) {
+                        val count = if (onScreen.isNotEmpty()) onScreen.size else detected.size
+                        NavigationBarItem(
+                            selected = false,
+                            onClick = {
+                                // 화면에 보이는 것이 있으면 바로 받고, 없으면 목록을 연다.
+                                val primary = onScreen.firstOrNull()
+                                if (primary != null) {
+                                    viewModel.onDownloadRequested(primary, onScreen + detected)
+                                } else {
+                                    viewModel.sheet = BrowserViewModel.Sheet.DETECTED
+                                }
+                            },
+                            label = { Text("받기") },
+                            icon = {
+                                BadgedBox(badge = { Badge { Text("$count") } }) {
+                                    Icon(Icons.Default.Download, contentDescription = "영상 받기")
                                 }
                             },
                         )

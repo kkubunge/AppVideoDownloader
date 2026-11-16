@@ -42,7 +42,12 @@ object HlsDownloader {
         ) : Resolved
     }
 
-    data class Outcome(val bytes: Long, val isFragmentedMp4: Boolean)
+    data class Outcome(
+        val bytes: Long,
+        val isFragmentedMp4: Boolean,
+        /** 소리가 따로 온 경우 그 파일. 영상과 합친 뒤 지운다. */
+        val audioFile: File? = null,
+    )
 
     suspend fun resolve(url: String, headers: Map<String, String>): Resolved =
         withContext(Dispatchers.IO) {
@@ -157,10 +162,54 @@ object HlsDownloader {
      */
     suspend fun download(
         playlistUrl: String,
+        audioUrl: String?,
         headers: Map<String, String>,
         target: File,
         startSegment: Int,
         startBytes: Long,
+        onProgress: (segmentIndex: Int, segmentCount: Int, bytes: Long) -> Unit,
+    ): Outcome = withContext(Dispatchers.IO) {
+        val video = downloadTrack(playlistUrl, headers, target, startSegment, startBytes, onProgress)
+
+        // 영상과 소리를 따로 보내는 스트림이면 소리도 받아 둔다. 나중에 하나로 합친다.
+        val audioFile = audioUrl?.let { url ->
+            val file = File(target.parentFile, "${target.nameWithoutExtension}.audio")
+            try {
+                DebugLog.log("HLS", "소리 트랙 받기 시작")
+                // 소리는 영상에 견줘 작아서 이어받기를 따로 챙기지 않는다.
+                downloadTrack(
+                    playlistUrl = url,
+                    headers = headers,
+                    target = file,
+                    startSegment = 0,
+                    startBytes = 0,
+                    // 소리 트랙이 맞으므로 '영상이 아니다'로 막으면 안 된다.
+                    requireVideo = false,
+                ) { _, _, _ -> }
+                DebugLog.log("HLS", "소리 트랙 ${file.length()}바이트")
+                file
+            } catch (t: Throwable) {
+                // 소리를 못 받았다고 영상까지 버릴 이유는 없다.
+                DebugLog.log("HLS", "소리 트랙 실패 · ${t.message}")
+                file.delete()
+                null
+            }
+        }
+
+        Outcome(
+            bytes = video.bytes,
+            isFragmentedMp4 = video.isFragmentedMp4,
+            audioFile = audioFile,
+        )
+    }
+
+    private suspend fun downloadTrack(
+        playlistUrl: String,
+        headers: Map<String, String>,
+        target: File,
+        startSegment: Int,
+        startBytes: Long,
+        requireVideo: Boolean = true,
         onProgress: (segmentIndex: Int, segmentCount: Int, bytes: Long) -> Unit,
     ): Outcome = withContext(Dispatchers.IO) {
         val document = fetchPlaylist(playlistUrl, headers)
@@ -175,7 +224,7 @@ object HlsDownloader {
         }
 
         val playlist = M3u8Parser.parseMedia(media.text, media.baseUrl)
-        rejectIfNotVideo(playlistUrl, playlist)
+        if (requireVideo) rejectIfNotVideo(playlistUrl, playlist)
 
         DebugLog.log(
             "HLS",

@@ -28,7 +28,15 @@ object M3u8Parser {
 
     fun isMaster(text: String): Boolean = text.contains("#EXT-X-STREAM-INF")
 
+    /**
+     * 마스터에 적힌 화질 목록.
+     *
+     * 영상과 소리를 따로 보내는 스트림이 많다. 그럴 때 화질 줄에는 영상만 들어 있고,
+     * 소리는 #EXT-X-MEDIA로 따로 선언된다. 둘을 짝지어 두지 않으면 소리 없는 영상을
+     * 받게 된다.
+     */
     fun parseMaster(text: String, baseUrl: String): List<HlsVariant> {
+        val audioByGroup = parseAudioRenditions(text, baseUrl)
         val variants = mutableListOf<HlsVariant>()
         val lines = text.lines()
         var i = 0
@@ -47,12 +55,38 @@ object M3u8Parser {
                         width = w,
                         height = h,
                         codecs = attrs["CODECS"],
+                        audioUrl = attrs["AUDIO"]?.let { audioByGroup[it] },
                     )
                 }
             }
             i++
         }
         return variants.distinctBy { it.url }.sortedByDescending { it.bandwidth }
+    }
+
+    /** 그룹 이름 → 소리 플레이리스트 주소. 기본으로 표시된 것을 우선한다. */
+    private fun parseAudioRenditions(text: String, baseUrl: String): Map<String, String> {
+        val result = HashMap<String, String>()
+        val pinned = HashSet<String>()
+
+        for (raw in text.lines()) {
+            val line = raw.trim()
+            if (!line.startsWith("#EXT-X-MEDIA:")) continue
+
+            val attrs = parseAttributes(line.substringAfter(':'))
+            if (!attrs["TYPE"].equals("AUDIO", ignoreCase = true)) continue
+
+            val group = attrs["GROUP-ID"] ?: continue
+            val uri = attrs["URI"] ?: continue
+            if (group in pinned) continue
+
+            val isDefault = attrs["DEFAULT"].equals("YES", ignoreCase = true)
+            if (isDefault || group !in result) {
+                result[group] = resolve(baseUrl, uri)
+                if (isDefault) pinned += group
+            }
+        }
+        return result
     }
 
     fun parseMedia(text: String, baseUrl: String): MediaPlaylist {

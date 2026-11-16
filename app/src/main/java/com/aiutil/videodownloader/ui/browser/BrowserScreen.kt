@@ -3,9 +3,7 @@ package com.aiutil.videodownloader.ui.browser
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,19 +23,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,17 +45,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
@@ -149,6 +138,7 @@ fun BrowserScreen(
             viewModel = viewModel,
             tabManager = tabManager,
             isBookmarked = isBookmarked,
+            detectedCount = detected.size,
         )
 
         // 페이지 내용과 주소창 사이의 경계. 사이트 배경이 밝으면 이 선이 없을 때
@@ -169,25 +159,8 @@ fun BrowserScreen(
 
         val showStartPage = activeTab == null || activeTab.url.isBlank()
 
-        // 받기 버튼은 페이지 내용을 가린다. 끌어서 옮길 수 있게 위치를 들고 있는다.
-        var areaSize by remember { mutableStateOf(IntSize.Zero) }
-        var buttonSize by remember { mutableStateOf(IntSize.Zero) }
-        var buttonOffsetX by rememberSaveable { mutableFloatStateOf(0f) }
-        var buttonOffsetY by rememberSaveable { mutableFloatStateOf(0f) }
-
-        // 화면이 바뀌면 버튼이 밖으로 밀려날 수 있다. 다시 안으로 들인다.
-        LaunchedEffect(areaSize, buttonSize) {
-            val minX = -(areaSize.width - buttonSize.width).coerceAtLeast(0).toFloat()
-            val minY = -(areaSize.height - buttonSize.height).coerceAtLeast(0).toFloat()
-            buttonOffsetX = buttonOffsetX.coerceIn(minX, 0f)
-            buttonOffsetY = buttonOffsetY.coerceIn(minY, 0f)
-        }
-
-        Box(
-            Modifier
-                .weight(1f)
-                .onSizeChanged { areaSize = it }
-        ) {
+        // 받기 버튼은 하단 막대로 옮겼다. 페이지 위에 떠 있으면 내용을 가린다.
+        Box(Modifier.weight(1f)) {
             if (showStartPage) {
                 // 아직 아무것도 열지 않았으면 WebView를 붙이지 않는다. 내용이 없는
                 // WebView가 검은 사각형으로 그려지면서 주소창 영역까지 덮는 기기가 있다.
@@ -205,59 +178,6 @@ fun BrowserScreen(
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
-                }
-            }
-
-            // 화면에 보이는 영상이 있으면 그것 하나를 바로 받게 한다. 목록을 펼쳐
-            // 고르는 과정이 피드에서는 오히려 번거롭다. 목록은 옆 버튼으로 남긴다.
-            val primary = onScreen.firstOrNull()
-
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .offset {
-                        IntOffset(buttonOffsetX.roundToInt(), buttonOffsetY.roundToInt())
-                    }
-                    .onSizeChanged { buttonSize = it }
-                    .pointerInput(areaSize, buttonSize) {
-                        detectDragGestures { change, drag ->
-                            change.consume()
-                            val minX = -(areaSize.width - buttonSize.width)
-                                .coerceAtLeast(0).toFloat()
-                            val minY = -(areaSize.height - buttonSize.height)
-                                .coerceAtLeast(0).toFloat()
-                            buttonOffsetX = (buttonOffsetX + drag.x).coerceIn(minX, 0f)
-                            buttonOffsetY = (buttonOffsetY + drag.y).coerceIn(minY, 0f)
-                        }
-                    }
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (detected.size > 1) {
-                    FilledTonalIconButton(
-                        onClick = { viewModel.sheet = BrowserViewModel.Sheet.DETECTED },
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.List,
-                            contentDescription = "영상 목록 ${detected.size}개",
-                        )
-                    }
-                }
-
-                when {
-                    primary != null -> ExtendedFloatingActionButton(
-                        // 고른 것이 자막으로 드러나면 같은 화면의 다른 주소로 넘어간다.
-                        onClick = { viewModel.onDownloadRequested(primary, onScreen + detected) },
-                        icon = { Icon(Icons.Default.Download, contentDescription = null) },
-                        text = { Text("이 영상 받기") },
-                    )
-
-                    detected.isNotEmpty() -> ExtendedFloatingActionButton(
-                        onClick = { viewModel.sheet = BrowserViewModel.Sheet.DETECTED },
-                        icon = { Icon(Icons.Default.VideoLibrary, contentDescription = null) },
-                        text = { Text("영상 ${detected.size}개") },
-                    )
                 }
             }
 
@@ -363,6 +283,7 @@ private fun AddressBar(
     viewModel: BrowserViewModel,
     tabManager: TabManager,
     isBookmarked: Boolean,
+    detectedCount: Int,
 ) {
     val context = LocalContext.current
     val activeTab = tabManager.activeTab
@@ -495,6 +416,14 @@ private fun AddressBar(
                         onClick = {
                             menuOpen = false
                             viewModel.sheet = BrowserViewModel.Sheet.BOOKMARKS
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("찾은 영상 목록") },
+                        enabled = detectedCount > 0,
+                        onClick = {
+                            menuOpen = false
+                            viewModel.sheet = BrowserViewModel.Sheet.DETECTED
                         },
                     )
                     DropdownMenuItem(
