@@ -21,6 +21,8 @@ class SnifferWebViewClient(
     private val detections: DetectionStore,
     private val onNavigate: (url: String, canGoBack: Boolean) -> Unit,
     private val onLoadingChanged: (Boolean) -> Unit,
+    /** 페이지가 자리를 잡았을 때. 보던 위치를 되돌리는 데 쓴다. */
+    private val onPageSettled: (String) -> Unit = {},
 ) : WebViewClient() {
 
     @Volatile
@@ -59,6 +61,7 @@ class SnifferWebViewClient(
         onLoadingChanged(false)
         onNavigate(url, view.canGoBack())
         view.evaluateJavascript(VideoJsBridge.SCANNER_JS, null)
+        onPageSettled(url)
     }
 
     override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
@@ -67,6 +70,7 @@ class SnifferWebViewClient(
         currentUrl = url
         detections.onSoftNavigation(url)
         onNavigate(url, view.canGoBack())
+        onPageSettled(url)
     }
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {

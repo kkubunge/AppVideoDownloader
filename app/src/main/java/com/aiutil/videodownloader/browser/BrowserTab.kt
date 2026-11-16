@@ -55,6 +55,17 @@ class BrowserTab(
      * 그 탭을 실제로 볼 때 비로소 불러온다.
      */
     private var pendingUrl: String? = restoredUrl?.takeIf { it.isNotBlank() }
+
+    /** 주소별로 마지막에 보던 세로 위치. 오래된 것부터 버린다. */
+    private val scrollPositions = object : LinkedHashMap<String, Int>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Int>) =
+            size > MAX_SCROLL_MEMORY
+    }
+
+    private var returningBack = false
+
+    /** 새 복원이 시작되면 이전 복원 시도를 무효로 만든다. */
+    private var restoreToken = 0
     var isLoading by mutableStateOf(false)
         private set
     var canGoBack by mutableStateOf(false)
@@ -83,6 +94,7 @@ class BrowserTab(
                 isLoading = loading
                 if (!loading) progress = 100
             },
+            onPageSettled = ::restoreScrollIfReturning,
         )
         client = snifferClient
         webView = createWebView(context, snifferClient)
@@ -99,6 +111,12 @@ class BrowserTab(
             // 비워 두면 내용이 없을 때 검게 그려진다. 페이지가 뜨기 전 검은 화면이
             // 번쩍이는 것도 이걸로 막는다.
             setBackgroundColor(android.graphics.Color.WHITE)
+
+            // 보던 자리를 계속 기억해 둔다. 떠날 때 따로 챙기려 하면 이미 늦다.
+            setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                val key = snifferClient.currentUrl
+                if (key.isNotBlank()) scrollPositions[key] = scrollY
+            }
 
             settings.apply {
                 javaScriptEnabled = true
@@ -192,7 +210,33 @@ class BrowserTab(
     }
 
     fun goBack() {
-        if (webView.canGoBack()) webView.goBack()
+        if (!webView.canGoBack()) return
+        // 돌아간 페이지에서 보던 자리로 되돌리기 위한 표시.
+        returningBack = true
+        webView.goBack()
+    }
+
+    /**
+     * 뒤로 갔을 때 보던 자리로 되돌린다.
+     *
+     * 사이트가 스스로 해 주는 곳도 있지만(X 등) 그렇지 않은 곳이 많다. 사이트가
+     * 이미 되돌려 놓았으면 건드리지 않는다.
+     */
+    private fun restoreScrollIfReturning(pageUrl: String) {
+        if (!returningBack) return
+        returningBack = false
+
+        val target = scrollPositions[pageUrl]?.takeIf { it > 0 } ?: return
+        val token = ++restoreToken
+
+        // 내용이 다 그려지기 전에는 그만큼 내려갈 수 없다. 자리가 날 때까지 몇 번 시도한다.
+        RESTORE_DELAYS_MS.forEach { delay ->
+            webView.postDelayed({
+                if (token != restoreToken) return@postDelayed
+                if (webView.scrollY >= target) return@postDelayed
+                webView.scrollTo(0, target)
+            }, delay)
+        }
     }
 
     fun reload() = webView.reload()
@@ -223,5 +267,16 @@ class BrowserTab(
 
     private companion object {
         const val BLANK_PAGE = "about:blank"
+
+        /** 기억해 둘 주소 수. 한 탭에서 오간 페이지를 넉넉히 덮는다. */
+        const val MAX_SCROLL_MEMORY = 40
+
+        /**
+         * 되돌리기를 시도할 시점들.
+         *
+         * 한 번만 해서는 거의 안 된다. 페이지가 뜬 직후에는 내용이 짧아 그만큼
+         * 내려갈 수 없고, 이미지와 지연 로딩이 채워지면서 길어진다.
+         */
+        val RESTORE_DELAYS_MS = longArrayOf(120, 300, 600, 1_000, 1_600)
     }
 }
